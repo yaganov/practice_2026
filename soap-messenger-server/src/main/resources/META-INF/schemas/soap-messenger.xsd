@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:soap-messenger:v1"
+           xmlns:tns="urn:soap-messenger:v1"
+           elementFormDefault="qualified"
+           >
+
+    <!-- Простые типы -->
+
+    <xs:simpleType name="UuidType">
+        <xs:restriction base="xs:string">
+            <xs:length value="36"/>
+            <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="UsernameType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+            <xs:maxLength value="32"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="PasswordType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="NonEmptyStringType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TokenType">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ServiceErrorCodeType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="VALIDATION_ERROR"/>
+            <xs:enumeration value="USERNAME_ALREADY_EXISTS"/>
+            <xs:enumeration value="INVALID_CREDENTIALS"/>
+            <xs:enumeration value="UNAUTHORIZED"/>
+            <xs:enumeration value="USER_NOT_FOUND"/>
+            <xs:enumeration value="DIALOG_NOT_FOUND"/>
+            <xs:enumeration value="ACCESS_DENIED"/>
+            <xs:enumeration value="INTERNAL_ERROR"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Сложные типы -->
+
+    <xs:complexType name="UserType">
+        <xs:sequence>
+            <xs:element name="userId" type="tns:UuidType"/>
+            <xs:element name="username" type="tns:UsernameType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DialogType">
+        <xs:sequence>
+            <xs:element name="dialogId" type="tns:UuidType"/>
+            <xs:element name="createdAt" type="xs:dateTime"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MessageType">
+        <xs:sequence>
+            <xs:element name="messageId" type="tns:UuidType"/>
+            <xs:element name="senderId" type="tns:UuidType"/>
+            <xs:element name="content" type="tns:NonEmptyStringType"/>
+            <xs:element name="createdAt" type="xs:dateTime"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ServiceFaultType">
+        <xs:sequence>
+            <xs:element name="code" type="tns:ServiceErrorCodeType"/>
+            <xs:element name="message" type="tns:NonEmptyStringType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Регистрация -->
+
+    <xs:element name="RegisterUserRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="username" type="tns:UsernameType"/>
+                <xs:element name="password" type="tns:PasswordType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="RegisterUserResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="userId" type="tns:UuidType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="RegisterUserFault" type="tns:ServiceFaultType"/>
+
+    <!-- Аутентификация -->
+
+    <xs:element name="AuthenticateUserRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="username" type="tns:UsernameType"/>
+                <xs:element name="password" type="tns:PasswordType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="AuthenticateUserResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="token" type="tns:TokenType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="AuthenticateUserFault" type="tns:ServiceFaultType"/>
+
+    <!-- Поиск пользователя -->
+
+    <xs:element name="FindUserRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="username" type="tns:UsernameType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="FindUserResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="user" type="tns:UserType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="FindUserFault" type="tns:ServiceFaultType"/>
+
+    <!-- Создание или открытие диалога -->
+
+    <xs:element name="OpenOrCreateDialogRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="otherUserId" type="tns:UuidType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="OpenOrCreateDialogResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="dialog" type="tns:DialogType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="OpenOrCreateDialogFault" type="tns:ServiceFaultType"/>
+
+    <!-- Получение списка диалогов -->
+
+    <xs:element name="GetDialogsRequest">
+        <xs:complexType/>
+    </xs:element>
+
+    <xs:element name="GetDialogsResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="dialog"
+                            type="tns:DialogType"
+                            minOccurs="0"
+                            maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="GetDialogsFault" type="tns:ServiceFaultType"/>
+
+    <!-- Получение истории сообщений -->
+
+    <xs:element name="GetMessageHistoryRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="dialogId" type="tns:UuidType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="GetMessageHistoryResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="message"
+                            type="tns:MessageType"
+                            minOccurs="0"
+                            maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="GetMessageHistoryFault" type="tns:ServiceFaultType"/>
+
+</xs:schema>
