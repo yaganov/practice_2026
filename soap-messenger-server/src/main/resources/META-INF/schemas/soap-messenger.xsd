@@ -61,9 +61,10 @@
         </xs:sequence>
     </xs:complexType>
 
-    <xs:complexType name="DialogType">
+    <xs:complexType name="DialogSummaryType">
         <xs:sequence>
             <xs:element name="dialogId" type="tns:UuidType"/>
+            <xs:element name="interlocutor" type="tns:UserType"/>
             <xs:element name="createdAt" type="xs:dateTime"/>
         </xs:sequence>
     </xs:complexType>
@@ -159,7 +160,7 @@
     <xs:element name="OpenOrCreateDialogResponse">
         <xs:complexType>
             <xs:sequence>
-                <xs:element name="dialog" type="tns:DialogType"/>
+                <xs:element name="dialog" type="tns:DialogSummaryType"/>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
@@ -176,7 +177,7 @@
         <xs:complexType>
             <xs:sequence>
                 <xs:element name="dialog"
-                            type="tns:DialogType"
+                            type="tns:DialogSummaryType"
                             minOccurs="0"
                             maxOccurs="unbounded"/>
             </xs:sequence>
