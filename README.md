@@ -2,12 +2,30 @@
 
 Учебный проект мобильного мессенджера.
 
-## Документация
+## Запуск
 
-* `docs/technical-specification` — техническое задание;
-* `docs/uml/soap-messenger-uml.drawio` — UML-диаграммы проекта;
-* `docs/database/soap-messenger-er.ercmdl` — исходный файл ER-модели базы данных;
-* `docs/reports/` — ежедневные отчёты о выполненной работе в период практики.
+1. Создать `.env` на основе `.env.example` и задать `POSTGRES_PASSWORD`.
+2. Запустить стек:
+
+```bash
+docker compose up --build -d
+```
+
+или 
+
+```bash
+make up
+```
+
+**WSDL:** http://localhost:8080/ws/soap-messenger.wsdl
+
+## Как устроено
+* **XSD** — `soap-messenger-server/src/main/resources/META-INF/schemas/soap-messenger.xsd`
+* **WSDL** генерируется из XSD при старте приложения
+
+## Структура репозитория
+* `docs/` — техническое задание, UML, ER-модель, отчёты
+* `soap-messenger-server/` — Spring Boot-приложение, XSD, Flyway-миграции, Dockerfile
 
 ## Как открыть UML-диаграммы
 
