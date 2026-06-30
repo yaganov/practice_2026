@@ -4,7 +4,7 @@
 
 ## Запуск
 
-1. Создать `.env` на основе `.env.example` и задать `POSTGRES_PASSWORD`.
+1. Создать `.env` на основе `.env.example` и задать `POSTGRES_PASSWORD` и `JWT_SECRET`.
 2. Запустить стек:
 
 ```bash

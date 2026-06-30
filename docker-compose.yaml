@@ -27,6 +27,8 @@ services:
       DB_NAME: ${POSTGRES_DB}
       DB_USERNAME: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL: ${JWT_TTL}
     depends_on:
       postgres:
         condition: service_healthy

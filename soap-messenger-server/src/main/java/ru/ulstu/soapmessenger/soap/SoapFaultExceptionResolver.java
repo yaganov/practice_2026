@@ -1,39 +1,39 @@
 package ru.ulstu.soapmessenger.soap;
 
-import org.springframework.dao.DataIntegrityViolationException;
+import java.util.Set;
+
+import javax.xml.namespace.QName;
+
 import org.springframework.oxm.jaxb.Jaxb2Marshaller;
-import org.springframework.stereotype.Component;
 import org.springframework.ws.soap.SoapFault;
 import org.springframework.ws.soap.SoapFaultDetail;
 import org.springframework.ws.soap.server.endpoint.AbstractSoapFaultDefinitionExceptionResolver;
 import org.springframework.ws.soap.server.endpoint.SoapFaultDefinition;
 
 import jakarta.xml.bind.JAXBElement;
-import ru.ulstu.soapmessenger.endpoint.RegisterUserEndpoint;
-import ru.ulstu.soapmessenger.exception.RegistrationValidationException;
-import ru.ulstu.soapmessenger.exception.UsernameAlreadyExistsException;
+import ru.ulstu.soapmessenger.exception.ServiceException;
 import ru.ulstu.soapmessenger.soap.generated.ObjectFactory;
 import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
 import ru.ulstu.soapmessenger.soap.generated.ServiceFaultType;
 
-@Component
-public class RegisterUserFaultExceptionResolver extends AbstractSoapFaultDefinitionExceptionResolver {
+public class SoapFaultExceptionResolver extends AbstractSoapFaultDefinitionExceptionResolver {
 
-	private static final FaultMapping USERNAME_ALREADY_EXISTS_MAPPING =
-			new FaultMapping(SoapFaultDefinition.CLIENT, "Имя пользователя уже занято",
-					ServiceErrorCodeType.USERNAME_ALREADY_EXISTS, "Имя пользователя уже занято");
+	private static final String INTERNAL_ERROR_MESSAGE = "Внутренняя ошибка сервера";
 	private static final FaultMapping INTERNAL_ERROR_MAPPING =
-			new FaultMapping(SoapFaultDefinition.SERVER, "Внутренняя ошибка сервера",
-					ServiceErrorCodeType.INTERNAL_ERROR, "Внутренняя ошибка сервера");
+			new FaultMapping(SoapFaultDefinition.SERVER, INTERNAL_ERROR_MESSAGE,
+					ServiceErrorCodeType.INTERNAL_ERROR, INTERNAL_ERROR_MESSAGE);
 
+	private final ObjectFactory objectFactory = new ObjectFactory();
 	private final Jaxb2Marshaller marshaller;
-	private final ObjectFactory objectFactory;
+	private final boolean authenticateFault;
 
-	public RegisterUserFaultExceptionResolver(RegisterUserEndpoint registerUserEndpoint) {
-		setMappedEndpoints(java.util.Set.of(registerUserEndpoint));
+	public SoapFaultExceptionResolver(Object endpoint, boolean authenticateFault) {
+		if (endpoint != null) {
+			setMappedEndpoints(Set.of(endpoint));
+		}
+		this.authenticateFault = authenticateFault;
 		marshaller = new Jaxb2Marshaller();
 		marshaller.setContextPath("ru.ulstu.soapmessenger.soap.generated");
-		objectFactory = new ObjectFactory();
 		try {
 			marshaller.afterPropertiesSet();
 		}
@@ -53,12 +53,12 @@ public class RegisterUserFaultExceptionResolver extends AbstractSoapFaultDefinit
 
 	@Override
 	protected void customizeFault(Object endpoint, Exception ex, SoapFault fault) {
-		FaultMapping mapping = mapFault(resolveCause(ex));
-		ServiceFaultType faultDetail = new ServiceFaultType();
-		faultDetail.setCode(mapping.detailCode());
-		faultDetail.setMessage(mapping.detailMessage());
 		try {
-			JAXBElement<ServiceFaultType> faultElement = objectFactory.createRegisterUserFault(faultDetail);
+			FaultMapping mapping = mapFault(resolveCause(ex));
+			ServiceFaultType faultDetail = new ServiceFaultType();
+			faultDetail.setCode(mapping.detailCode());
+			faultDetail.setMessage(mapping.detailMessage());
+			JAXBElement<ServiceFaultType> faultElement = createFaultElement(faultDetail);
 			SoapFaultDetail soapFaultDetail = fault.addFaultDetail();
 			marshaller.marshal(faultElement, soapFaultDetail.getResult());
 		}
@@ -68,12 +68,9 @@ public class RegisterUserFaultExceptionResolver extends AbstractSoapFaultDefinit
 	}
 
 	private FaultMapping mapFault(Throwable cause) {
-		if (cause instanceof RegistrationValidationException validationException) {
-			return new FaultMapping(SoapFaultDefinition.CLIENT, validationException.getMessage(),
-					ServiceErrorCodeType.VALIDATION_ERROR, validationException.getMessage());
-		}
-		if (cause instanceof UsernameAlreadyExistsException) {
-			return USERNAME_ALREADY_EXISTS_MAPPING;
+		if (cause instanceof ServiceException serviceException) {
+			return new FaultMapping(SoapFaultDefinition.CLIENT, serviceException.getMessage(),
+					serviceException.getCode(), serviceException.getMessage());
 		}
 		return INTERNAL_ERROR_MAPPING;
 	}
@@ -81,9 +78,7 @@ public class RegisterUserFaultExceptionResolver extends AbstractSoapFaultDefinit
 	private Throwable resolveCause(Throwable ex) {
 		Throwable current = ex;
 		while (current != null) {
-			if (current instanceof RegistrationValidationException
-					|| current instanceof UsernameAlreadyExistsException
-					|| current instanceof DataIntegrityViolationException) {
+			if (current instanceof ServiceException) {
 				return current;
 			}
 			current = current.getCause();
@@ -91,8 +86,15 @@ public class RegisterUserFaultExceptionResolver extends AbstractSoapFaultDefinit
 		return ex;
 	}
 
+	private JAXBElement<ServiceFaultType> createFaultElement(ServiceFaultType faultDetail) {
+		if (authenticateFault) {
+			return objectFactory.createAuthenticateUserFault(faultDetail);
+		}
+		return objectFactory.createRegisterUserFault(faultDetail);
+	}
+
 	private record FaultMapping(
-			javax.xml.namespace.QName faultCode,
+			QName faultCode,
 			String faultString,
 			ServiceErrorCodeType detailCode,
 			String detailMessage) {

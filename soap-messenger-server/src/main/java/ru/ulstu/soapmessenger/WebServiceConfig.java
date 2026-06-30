@@ -11,6 +11,10 @@ import org.springframework.ws.wsdl.wsdl11.DefaultWsdl11Definition;
 import org.springframework.xml.xsd.SimpleXsdSchema;
 import org.springframework.xml.xsd.XsdSchema;
 
+import ru.ulstu.soapmessenger.endpoint.AuthenticateUserEndpoint;
+import ru.ulstu.soapmessenger.endpoint.RegisterUserEndpoint;
+import ru.ulstu.soapmessenger.soap.SoapFaultExceptionResolver;
+
 @Configuration
 @EnableWs
 public class WebServiceConfig {
@@ -36,6 +40,17 @@ public class WebServiceConfig {
 	@Bean
 	public XsdSchema soapMessengerSchema() {
 		return new SimpleXsdSchema(new ClassPathResource("META-INF/schemas/soap-messenger.xsd"));
+	}
+
+	@Bean
+	public SoapFaultExceptionResolver registerUserFaultExceptionResolver(RegisterUserEndpoint registerUserEndpoint) {
+		return new SoapFaultExceptionResolver(registerUserEndpoint, false);
+	}
+
+	@Bean
+	public SoapFaultExceptionResolver authenticateUserFaultExceptionResolver(
+			AuthenticateUserEndpoint authenticateUserEndpoint) {
+		return new SoapFaultExceptionResolver(authenticateUserEndpoint, true);
 	}
 
 }
