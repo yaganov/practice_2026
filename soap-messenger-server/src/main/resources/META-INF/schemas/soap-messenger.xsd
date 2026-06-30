@@ -16,14 +16,15 @@
 
     <xs:simpleType name="UsernameType">
         <xs:restriction base="xs:string">
-            <xs:minLength value="1"/>
+            <xs:minLength value="5"/>
             <xs:maxLength value="32"/>
         </xs:restriction>
     </xs:simpleType>
 
     <xs:simpleType name="PasswordType">
         <xs:restriction base="xs:string">
-            <xs:minLength value="1"/>
+            <xs:minLength value="8"/>
+            <xs:maxLength value="32"/>
         </xs:restriction>
     </xs:simpleType>
 
