@@ -20,6 +20,7 @@ import ru.ulstu.soapmessenger.exception.ServiceException;
 import ru.ulstu.soapmessenger.model.User;
 import ru.ulstu.soapmessenger.repository.UserRepository;
 import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
+import ru.ulstu.soapmessenger.soap.generated.UserType;
 
 @Service
 public class UserService {
@@ -34,6 +35,7 @@ public class UserService {
 	private static final String PASSWORD_BLANK_MESSAGE = "Пароль не может быть пустым";
 	private static final String USERNAME_ALREADY_EXISTS_MESSAGE = "Имя пользователя уже занято";
 	private static final String INVALID_CREDENTIALS_MESSAGE = "Неверное имя пользователя или пароль";
+	private static final String USER_NOT_FOUND_MESSAGE = "Пользователь не найден";
 
 	private final UserRepository userRepository;
 	private final PasswordEncoder passwordEncoder;
@@ -80,6 +82,13 @@ public class UserService {
 				.orElseThrow(() -> new ServiceException(ServiceErrorCodeType.INVALID_CREDENTIALS,
 						INVALID_CREDENTIALS_MESSAGE));
 		return createJwtToken(user.getUserId());
+	}
+
+	public UserType findUser(String username) {
+		validateUsername(username);
+		return userRepository.findByUsername(username)
+				.map(this::toUserType)
+				.orElseThrow(() -> new ServiceException(ServiceErrorCodeType.USER_NOT_FOUND, USER_NOT_FOUND_MESSAGE));
 	}
 
 	public static String usernameTooShortMessage() {
@@ -136,6 +145,13 @@ public class UserService {
 				.build();
 		return jwtEncoder.encode(JwtEncoderParameters.from(
 				JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+	}
+
+	private UserType toUserType(User user) {
+		UserType userType = new UserType();
+		userType.setUserId(user.getUserId().toString());
+		userType.setUsername(user.getUsername());
+		return userType;
 	}
 
 	private static int codePointLength(String value) {
