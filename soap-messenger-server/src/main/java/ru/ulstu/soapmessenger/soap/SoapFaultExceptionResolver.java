@@ -22,6 +22,7 @@ public class SoapFaultExceptionResolver extends AbstractSoapFaultDefinitionExcep
 	public static final int FAULT_DETAIL_AUTHENTICATE = 1;
 	public static final int FAULT_DETAIL_FIND_USER = 2;
 	public static final int FAULT_DETAIL_OPEN_OR_CREATE_DIALOG = 3;
+	public static final int FAULT_DETAIL_GET_DIALOGS = 4;
 
 	private static final String INTERNAL_ERROR_MESSAGE = "Внутренняя ошибка сервера";
 	private static final FaultMapping INTERNAL_ERROR_MAPPING =
@@ -101,6 +102,7 @@ public class SoapFaultExceptionResolver extends AbstractSoapFaultDefinitionExcep
 			case FAULT_DETAIL_AUTHENTICATE -> objectFactory.createAuthenticateUserFault(faultDetail);
 			case FAULT_DETAIL_FIND_USER -> objectFactory.createFindUserFault(faultDetail);
 			case FAULT_DETAIL_OPEN_OR_CREATE_DIALOG -> objectFactory.createOpenOrCreateDialogFault(faultDetail);
+			case FAULT_DETAIL_GET_DIALOGS -> objectFactory.createGetDialogsFault(faultDetail);
 			default -> objectFactory.createRegisterUserFault(faultDetail);
 		};
 	}

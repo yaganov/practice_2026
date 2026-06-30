@@ -3,6 +3,7 @@ package ru.ulstu.soapmessenger.service;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.UUID;
 
 import javax.xml.datatype.DatatypeConfigurationException;
@@ -49,6 +50,25 @@ public class DialogService {
 				.orElseGet(() -> createDialog(currentUserId, otherUserId));
 
 		return toDialogSummary(dialog, otherUser);
+	}
+
+	@Transactional(readOnly = true)
+	public List<DialogSummaryType> getDialogs(UUID currentUserId) {
+		return dialogRepository.findPersonalDialogsWithInterlocutor(currentUserId).stream()
+				.map(this::toDialogSummary)
+				.toList();
+	}
+
+	private DialogSummaryType toDialogSummary(Object[] row) {
+		Dialog dialog = new Dialog();
+		dialog.setDialogId((UUID) row[0]);
+		dialog.setCreatedAt((LocalDateTime) row[1]);
+
+		User interlocutor = new User();
+		interlocutor.setUserId((UUID) row[2]);
+		interlocutor.setUsername((String) row[3]);
+
+		return toDialogSummary(dialog, interlocutor);
 	}
 
 	private Dialog createDialog(UUID currentUserId, UUID otherUserId) {

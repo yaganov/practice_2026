@@ -3,12 +3,14 @@ package ru.ulstu.soapmessenger.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -119,6 +121,36 @@ class DialogServiceTest {
 		assertEquals("Нельзя создать диалог с самим собой", ex.getMessage());
 		verify(userRepository, never()).findById(any());
 		verify(dialogRepository, never()).findPersonalDialogIdBetweenUsers(any(), any());
+	}
+
+	@Test
+	void getDialogs_returnsDialogsWithInterlocutor() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		UUID otherUserId = UUID.randomUUID();
+		LocalDateTime createdAt = LocalDateTime.of(2026, 3, 10, 14, 30);
+
+		when(dialogRepository.findPersonalDialogsWithInterlocutor(currentUserId))
+				.thenReturn(List.<Object[]>of(new Object[] {dialogId, createdAt, otherUserId, OTHER_USERNAME}));
+
+		List<DialogSummaryType> result = dialogService.getDialogs(currentUserId);
+
+		assertEquals(1, result.size());
+		assertEquals(dialogId.toString(), result.get(0).getDialogId());
+		assertEquals(otherUserId.toString(), result.get(0).getInterlocutor().getUserId());
+		assertEquals(OTHER_USERNAME, result.get(0).getInterlocutor().getUsername());
+		assertNotNull(result.get(0).getCreatedAt());
+	}
+
+	@Test
+	void getDialogs_returnsEmptyList() {
+		UUID currentUserId = UUID.randomUUID();
+
+		when(dialogRepository.findPersonalDialogsWithInterlocutor(currentUserId)).thenReturn(List.of());
+
+		List<DialogSummaryType> result = dialogService.getDialogs(currentUserId);
+
+		assertTrue(result.isEmpty());
 	}
 
 	private static User createUser(UUID userId, String username) {

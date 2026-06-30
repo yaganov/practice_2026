@@ -15,6 +15,7 @@ import org.springframework.xml.xsd.XsdSchema;
 
 import ru.ulstu.soapmessenger.endpoint.AuthenticateUserEndpoint;
 import ru.ulstu.soapmessenger.endpoint.FindUserEndpoint;
+import ru.ulstu.soapmessenger.endpoint.GetDialogsEndpoint;
 import ru.ulstu.soapmessenger.endpoint.OpenOrCreateDialogEndpoint;
 import ru.ulstu.soapmessenger.endpoint.RegisterUserEndpoint;
 import ru.ulstu.soapmessenger.soap.JwtAuthenticationInterceptor;
@@ -68,6 +69,12 @@ public class WebServiceConfig {
 	}
 
 	@Bean
+	public PayloadRootSmartSoapEndpointInterceptor getDialogsJwtAuthenticationInterceptor(
+			JwtAuthenticationInterceptor jwtAuthenticationInterceptor) {
+		return new PayloadRootSmartSoapEndpointInterceptor(jwtAuthenticationInterceptor, NAMESPACE, "GetDialogsRequest");
+	}
+
+	@Bean
 	public SoapFaultExceptionResolver registerUserFaultExceptionResolver(RegisterUserEndpoint registerUserEndpoint) {
 		return new SoapFaultExceptionResolver(registerUserEndpoint, false);
 	}
@@ -88,6 +95,11 @@ public class WebServiceConfig {
 			OpenOrCreateDialogEndpoint openOrCreateDialogEndpoint) {
 		return new SoapFaultExceptionResolver(openOrCreateDialogEndpoint,
 				SoapFaultExceptionResolver.FAULT_DETAIL_OPEN_OR_CREATE_DIALOG);
+	}
+
+	@Bean
+	public SoapFaultExceptionResolver getDialogsFaultExceptionResolver(GetDialogsEndpoint getDialogsEndpoint) {
+		return new SoapFaultExceptionResolver(getDialogsEndpoint, SoapFaultExceptionResolver.FAULT_DETAIL_GET_DIALOGS);
 	}
 
 }
