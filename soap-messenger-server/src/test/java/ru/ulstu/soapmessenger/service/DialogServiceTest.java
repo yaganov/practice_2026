@@ -1,0 +1,131 @@
+package ru.ulstu.soapmessenger.service;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import ru.ulstu.soapmessenger.exception.ServiceException;
+import ru.ulstu.soapmessenger.model.Dialog;
+import ru.ulstu.soapmessenger.model.User;
+import ru.ulstu.soapmessenger.repository.DialogRepository;
+import ru.ulstu.soapmessenger.repository.UserRepository;
+import ru.ulstu.soapmessenger.soap.generated.DialogSummaryType;
+import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
+
+@ExtendWith(MockitoExtension.class)
+class DialogServiceTest {
+
+	private static final String OTHER_USERNAME = "bob";
+
+	@Mock
+	private DialogRepository dialogRepository;
+
+	@Mock
+	private UserRepository userRepository;
+
+	private DialogService dialogService;
+
+	@BeforeEach
+	void setUp() {
+		dialogService = new DialogService(dialogRepository, userRepository);
+	}
+
+	@Test
+	void openOrCreateDialog_createsDialogWithTwoParticipants() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID otherUserId = UUID.randomUUID();
+		User otherUser = createUser(otherUserId, OTHER_USERNAME);
+
+		when(userRepository.findById(otherUserId)).thenReturn(Optional.of(otherUser));
+		when(dialogRepository.findPersonalDialogIdBetweenUsers(currentUserId, otherUserId))
+				.thenReturn(Optional.empty());
+		when(dialogRepository.saveAndFlush(any(Dialog.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		DialogSummaryType result = dialogService.openOrCreateDialog(currentUserId, otherUserId);
+
+		assertNotNull(result.getDialogId());
+		assertEquals(otherUserId.toString(), result.getInterlocutor().getUserId());
+		assertEquals(OTHER_USERNAME, result.getInterlocutor().getUsername());
+		assertNotNull(result.getCreatedAt());
+
+		ArgumentCaptor<Dialog> dialogCaptor = ArgumentCaptor.forClass(Dialog.class);
+		verify(dialogRepository).saveAndFlush(dialogCaptor.capture());
+		UUID dialogId = dialogCaptor.getValue().getDialogId();
+		verify(dialogRepository).addParticipant(dialogId, currentUserId);
+		verify(dialogRepository).addParticipant(dialogId, otherUserId);
+	}
+
+	@Test
+	void openOrCreateDialog_returnsExistingDialog() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID otherUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		User otherUser = createUser(otherUserId, OTHER_USERNAME);
+		Dialog existingDialog = new Dialog();
+		existingDialog.setDialogId(dialogId);
+		existingDialog.setCreatedAt(LocalDateTime.of(2026, 1, 15, 10, 30));
+
+		when(userRepository.findById(otherUserId)).thenReturn(Optional.of(otherUser));
+		when(dialogRepository.findPersonalDialogIdBetweenUsers(currentUserId, otherUserId))
+				.thenReturn(Optional.of(dialogId));
+		when(dialogRepository.findById(dialogId)).thenReturn(Optional.of(existingDialog));
+
+		DialogSummaryType result = dialogService.openOrCreateDialog(currentUserId, otherUserId);
+
+		assertEquals(dialogId.toString(), result.getDialogId());
+		assertEquals(otherUserId.toString(), result.getInterlocutor().getUserId());
+		verify(dialogRepository, never()).saveAndFlush(any(Dialog.class));
+		verify(dialogRepository, never()).addParticipant(any(), any());
+	}
+
+	@Test
+	void openOrCreateDialog_otherUserNotFound() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID otherUserId = UUID.randomUUID();
+
+		when(userRepository.findById(otherUserId)).thenReturn(Optional.empty());
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> dialogService.openOrCreateDialog(currentUserId, otherUserId));
+
+		assertEquals(ServiceErrorCodeType.USER_NOT_FOUND, ex.getCode());
+		assertEquals("Пользователь не найден", ex.getMessage());
+		verify(dialogRepository, never()).saveAndFlush(any(Dialog.class));
+	}
+
+	@Test
+	void openOrCreateDialog_selfDialogValidationError() {
+		UUID userId = UUID.randomUUID();
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> dialogService.openOrCreateDialog(userId, userId));
+
+		assertEquals(ServiceErrorCodeType.VALIDATION_ERROR, ex.getCode());
+		assertEquals("Нельзя создать диалог с самим собой", ex.getMessage());
+		verify(userRepository, never()).findById(any());
+		verify(dialogRepository, never()).findPersonalDialogIdBetweenUsers(any(), any());
+	}
+
+	private static User createUser(UUID userId, String username) {
+		User user = new User();
+		user.setUserId(userId);
+		user.setUsername(username);
+		return user;
+	}
+
+}

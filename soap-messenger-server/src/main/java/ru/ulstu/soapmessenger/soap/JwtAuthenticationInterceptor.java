@@ -16,6 +16,8 @@ import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
 
 public class JwtAuthenticationInterceptor implements EndpointInterceptor {
 
+	public static final String AUTHENTICATED_USER_ID = "authenticatedUserId";
+
 	private static final String AUTHORIZATION_HEADER = "Authorization";
 	private static final String BEARER_PREFIX = "Bearer ";
 	private static final String UNAUTHORIZED_MESSAGE = "Требуется действующий токен авторизации";
@@ -38,7 +40,8 @@ public class JwtAuthenticationInterceptor implements EndpointInterceptor {
 		}
 		try {
 			Jwt jwt = jwtDecoder.decode(token);
-			validateSubject(jwt.getSubject());
+			UUID userId = UUID.fromString(jwt.getSubject());
+			messageContext.setProperty(AUTHENTICATED_USER_ID, userId);
 		}
 		catch (JwtException | IllegalArgumentException ex) {
 			throw unauthorized();
@@ -79,10 +82,6 @@ public class JwtAuthenticationInterceptor implements EndpointInterceptor {
 		catch (java.io.IOException ex) {
 			return null;
 		}
-	}
-
-	private static void validateSubject(String subject) {
-		UUID.fromString(subject);
 	}
 
 	private static ServiceException unauthorized() {
