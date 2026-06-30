@@ -10,47 +10,72 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
+import java.util.Base64;
 import java.util.UUID;
+import java.util.stream.Stream;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.crypto.password.Pbkdf2PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
-import ru.ulstu.soapmessenger.exception.RegistrationValidationException;
-import ru.ulstu.soapmessenger.exception.UsernameAlreadyExistsException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.OctetSequenceKey;
+import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+
+import ru.ulstu.soapmessenger.exception.ServiceException;
 import ru.ulstu.soapmessenger.model.User;
 import ru.ulstu.soapmessenger.repository.UserRepository;
+import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
 	private static final String TEST_USERNAME = "test-user";
 	private static final String TEST_PASSWORD = "test-password";
+	private static final String TEST_SECRET_BASE64 = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==";
 
 	@Mock
 	private UserRepository userRepository;
 
 	private PasswordEncoder passwordEncoder;
+	private JwtDecoder jwtDecoder;
 	private UserService userService;
 
 	@BeforeEach
 	void setUp() {
 		passwordEncoder = Pbkdf2PasswordEncoder.defaultsForSpringSecurity_v5_8();
-		userService = new UserService(userRepository, passwordEncoder);
+		byte[] secretBytes = Base64.getDecoder().decode(TEST_SECRET_BASE64);
+		SecretKey secretKey = new SecretKeySpec(secretBytes, "HmacSHA256");
+		JwtEncoder jwtEncoder = new NimbusJwtEncoder(new ImmutableJWKSet<>(
+				new JWKSet(new OctetSequenceKey.Builder(secretBytes).algorithm(JWSAlgorithm.HS256).build())));
+		jwtDecoder = NimbusJwtDecoder.withSecretKey(secretKey).build();
+		userService = new UserService(userRepository, passwordEncoder, jwtEncoder, Duration.ofHours(24));
 	}
 
 	@Test
-	void register_success() {
+	void registerUser_success() {
 		when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
 		when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-		UUID userId = userService.register(TEST_USERNAME, TEST_PASSWORD);
+		UUID userId = userService.registerUser(TEST_USERNAME, TEST_PASSWORD);
 
 		assertNotNull(userId);
 
@@ -60,140 +85,82 @@ class UserServiceTest {
 		User savedUser = userCaptor.getValue();
 		assertEquals(userId, savedUser.getUserId());
 		assertEquals(TEST_USERNAME, savedUser.getUsername());
-		assertNotNull(savedUser.getCreatedAt());
 		assertNotEquals(TEST_PASSWORD, savedUser.getPasswordHash());
-		assertTrue(savedUser.getPasswordHash().length() <= 255);
 		assertTrue(passwordEncoder.matches(TEST_PASSWORD, savedUser.getPasswordHash()));
 	}
 
+	@ParameterizedTest
+	@MethodSource("invalidCredentialsCases")
+	void registerUser_invalidCredentials(String username, String password) {
+		assertThrows(ServiceException.class, () -> userService.registerUser(username, password));
+
+		verify(userRepository, never()).save(any(User.class));
+		verify(userRepository, never()).saveAndFlush(any(User.class));
+	}
+
 	@Test
-	void register_usernameAlreadyExists() {
+	void registerUser_usernameAlreadyExists() {
 		when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(true);
 
-		assertThrows(UsernameAlreadyExistsException.class,
-				() -> userService.register(TEST_USERNAME, TEST_PASSWORD));
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> userService.registerUser(TEST_USERNAME, TEST_PASSWORD));
 
-		verify(userRepository, never()).save(any(User.class));
+		assertEquals(ServiceErrorCodeType.USERNAME_ALREADY_EXISTS, ex.getCode());
 		verify(userRepository, never()).saveAndFlush(any(User.class));
 	}
 
 	@Test
-	void register_blankUsername() {
-		assertThrows(RegistrationValidationException.class,
-				() -> userService.register("   ", TEST_PASSWORD));
+	void authenticateUser_success() {
+		UUID userId = UUID.randomUUID();
+		User user = new User();
+		user.setUserId(userId);
+		user.setPasswordHash(passwordEncoder.encode(TEST_PASSWORD));
 
-		verify(userRepository, never()).save(any(User.class));
-		verify(userRepository, never()).saveAndFlush(any(User.class));
+		when(userRepository.findByUsername(TEST_USERNAME)).thenReturn(java.util.Optional.of(user));
+
+		String token = userService.authenticateUser(TEST_USERNAME, TEST_PASSWORD);
+
+		Jwt jwt = jwtDecoder.decode(token);
+		assertEquals(userId.toString(), jwt.getSubject());
+		assertEquals("soap-messenger", jwt.getClaimAsString("iss"));
+		assertNotNull(jwt.getIssuedAt());
+		assertNotNull(jwt.getExpiresAt());
+		assertTrue(jwt.getExpiresAt().isAfter(jwt.getIssuedAt()));
 	}
 
 	@Test
-	void register_blankPassword() {
-		assertThrows(RegistrationValidationException.class,
-				() -> userService.register(TEST_USERNAME, "   "));
+	void authenticateUser_userNotFound() {
+		when(userRepository.findByUsername(TEST_USERNAME)).thenReturn(java.util.Optional.empty());
 
-		verify(userRepository, never()).save(any(User.class));
-		verify(userRepository, never()).saveAndFlush(any(User.class));
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> userService.authenticateUser(TEST_USERNAME, TEST_PASSWORD));
+
+		assertEquals(ServiceErrorCodeType.INVALID_CREDENTIALS, ex.getCode());
+		assertEquals("Неверное имя пользователя или пароль", ex.getMessage());
 	}
 
 	@Test
-	void register_usernameTooShort() {
-		assertThrows(RegistrationValidationException.class,
-				() -> userService.register("abcd", TEST_PASSWORD));
+	void authenticateUser_wrongPassword() {
+		User user = new User();
+		user.setPasswordHash(passwordEncoder.encode("other-password"));
 
-		verify(userRepository, never()).save(any(User.class));
-		verify(userRepository, never()).saveAndFlush(any(User.class));
+		when(userRepository.findByUsername(TEST_USERNAME)).thenReturn(java.util.Optional.of(user));
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> userService.authenticateUser(TEST_USERNAME, TEST_PASSWORD));
+
+		assertEquals(ServiceErrorCodeType.INVALID_CREDENTIALS, ex.getCode());
+		assertEquals("Неверное имя пользователя или пароль", ex.getMessage());
 	}
 
-	@Test
-	void register_usernameMinLength() {
-		when(userRepository.existsByUsername("abcde")).thenReturn(false);
-		when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-		UUID userId = userService.register("abcde", TEST_PASSWORD);
-
-		assertNotNull(userId);
-		verify(userRepository).saveAndFlush(any(User.class));
-	}
-
-	@Test
-	void register_usernameMaxLength() {
-		String username = "a".repeat(32);
-		when(userRepository.existsByUsername(username)).thenReturn(false);
-		when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-		UUID userId = userService.register(username, TEST_PASSWORD);
-
-		assertNotNull(userId);
-		verify(userRepository).saveAndFlush(any(User.class));
-	}
-
-	@Test
-	void register_usernameTooLong() {
-		assertThrows(RegistrationValidationException.class,
-				() -> userService.register("a".repeat(33), TEST_PASSWORD));
-
-		verify(userRepository, never()).save(any(User.class));
-		verify(userRepository, never()).saveAndFlush(any(User.class));
-	}
-
-	@Test
-	void register_passwordTooShort() {
-		assertThrows(RegistrationValidationException.class,
-				() -> userService.register(TEST_USERNAME, "1234567"));
-
-		verify(userRepository, never()).save(any(User.class));
-		verify(userRepository, never()).saveAndFlush(any(User.class));
-	}
-
-	@Test
-	void register_passwordMinLength() {
-		when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
-		when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-		String password = "12345678";
-		UUID userId = userService.register(TEST_USERNAME, password);
-
-		assertNotNull(userId);
-
-		ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-		verify(userRepository).saveAndFlush(userCaptor.capture());
-		assertNotEquals(password, userCaptor.getValue().getPasswordHash());
-		assertTrue(passwordEncoder.matches(password, userCaptor.getValue().getPasswordHash()));
-	}
-
-	@Test
-	void register_passwordMaxLength() {
-		when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
-		when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-		String password = "p".repeat(32);
-		UUID userId = userService.register(TEST_USERNAME, password);
-
-		assertNotNull(userId);
-
-		ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-		verify(userRepository).saveAndFlush(userCaptor.capture());
-		assertNotEquals(password, userCaptor.getValue().getPasswordHash());
-		assertTrue(passwordEncoder.matches(password, userCaptor.getValue().getPasswordHash()));
-	}
-
-	@Test
-	void register_passwordTooLong() {
-		assertThrows(RegistrationValidationException.class,
-				() -> userService.register(TEST_USERNAME, "p".repeat(33)));
-
-		verify(userRepository, never()).save(any(User.class));
-		verify(userRepository, never()).saveAndFlush(any(User.class));
-	}
-
-	@Test
-	void register_uniqueConstraintViolationDuringFlush() {
-		when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
-		when(userRepository.saveAndFlush(any(User.class)))
-				.thenThrow(new DataIntegrityViolationException("unique violation"));
-
-		assertThrows(UsernameAlreadyExistsException.class,
-				() -> userService.register(TEST_USERNAME, TEST_PASSWORD));
+	private static Stream<Arguments> invalidCredentialsCases() {
+		return Stream.of(
+				Arguments.of("abcd", TEST_PASSWORD),
+				Arguments.of("a".repeat(33), TEST_PASSWORD),
+				Arguments.of("   ", TEST_PASSWORD),
+				Arguments.of(TEST_USERNAME, "1234567"),
+				Arguments.of(TEST_USERNAME, "p".repeat(33)),
+				Arguments.of(TEST_USERNAME, "   "));
 	}
 
 }

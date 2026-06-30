@@ -24,7 +24,7 @@ public class RegisterUserEndpoint {
 	@ResponsePayload
 	public RegisterUserResponse registerUser(@RequestPayload RegisterUserRequest request) {
 		RegisterUserResponse response = new RegisterUserResponse();
-		response.setUserId(userService.register(request.getUsername(), request.getPassword()).toString());
+		response.setUserId(userService.registerUser(request.getUsername(), request.getPassword()).toString());
 		return response;
 	}
 

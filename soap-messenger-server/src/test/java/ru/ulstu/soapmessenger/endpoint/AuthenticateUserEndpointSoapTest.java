@@ -8,7 +8,6 @@ import static org.springframework.ws.test.server.ResponseMatchers.noFault;
 import static org.springframework.ws.test.server.ResponseMatchers.xpath;
 
 import java.util.Map;
-import java.util.UUID;
 
 import javax.xml.transform.Source;
 
@@ -27,9 +26,9 @@ import ru.ulstu.soapmessenger.service.UserService;
 import ru.ulstu.soapmessenger.soap.SoapFaultExceptionResolver;
 import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
 
-@WebServiceServerTest(RegisterUserEndpoint.class)
-@Import(RegisterUserEndpointSoapTest.SoapFaultConfig.class)
-class RegisterUserEndpointSoapTest {
+@WebServiceServerTest(AuthenticateUserEndpoint.class)
+@Import(AuthenticateUserEndpointSoapTest.SoapFaultConfig.class)
+class AuthenticateUserEndpointSoapTest {
 
 	private static final Map<String, String> NAMESPACES = Map.of("soapenv", "http://schemas.xmlsoap.org/soap/envelope/",
 			"tns", "urn:soap-messenger:v1");
@@ -41,59 +40,59 @@ class RegisterUserEndpointSoapTest {
 	private UserService userService;
 
 	@Test
-	void registerUser_success() throws Exception {
-		UUID userId = UUID.randomUUID();
-		when(userService.registerUser("alice", "SecretPass1")).thenReturn(userId);
+	void authenticateUser_success() throws Exception {
+		when(userService.authenticateUser("alice", "SecretPass1")).thenReturn("jwt-token-value");
 
-		client.sendRequest(withSoapEnvelope(registerUserEnvelope("alice", "SecretPass1")))
+		client.sendRequest(withSoapEnvelope(authenticateUserEnvelope("alice", "SecretPass1")))
 				.andExpect(noFault())
-				.andExpect(xpath("//tns:RegisterUserResponse/tns:userId", NAMESPACES).evaluatesTo(userId.toString()));
+				.andExpect(xpath("//tns:AuthenticateUserResponse/tns:token", NAMESPACES)
+						.evaluatesTo("jwt-token-value"));
 	}
 
 	@Test
-	void registerUser_validationFault() throws Exception {
-		when(userService.registerUser(eq("abcd"), eq("SecretPass1")))
+	void authenticateUser_validationFault() throws Exception {
+		when(userService.authenticateUser(eq("alice"), eq("1234567")))
 				.thenThrow(new ServiceException(ServiceErrorCodeType.VALIDATION_ERROR,
-						UserService.usernameTooShortMessage()));
+						UserService.passwordTooShortMessage()));
 
-		client.sendRequest(withSoapEnvelope(registerUserEnvelope("abcd", "SecretPass1")))
-				.andExpect(clientOrSenderFault(UserService.usernameTooShortMessage()))
-				.andExpect(xpath("//soapenv:Fault/detail/tns:RegisterUserFault/tns:code", NAMESPACES)
+		client.sendRequest(withSoapEnvelope(authenticateUserEnvelope("alice", "1234567")))
+				.andExpect(clientOrSenderFault(UserService.passwordTooShortMessage()))
+				.andExpect(xpath("//soapenv:Fault/detail/tns:AuthenticateUserFault/tns:code", NAMESPACES)
 						.evaluatesTo("VALIDATION_ERROR"));
 	}
 
 	@Test
-	void registerUser_usernameAlreadyExistsFault() throws Exception {
-		when(userService.registerUser("alice", "SecretPass1"))
-				.thenThrow(new ServiceException(ServiceErrorCodeType.USERNAME_ALREADY_EXISTS,
-						"Имя пользователя уже занято"));
+	void authenticateUser_invalidCredentialsFault() throws Exception {
+		when(userService.authenticateUser("alice", "SecretPass1"))
+				.thenThrow(new ServiceException(ServiceErrorCodeType.INVALID_CREDENTIALS,
+						"Неверное имя пользователя или пароль"));
 
-		client.sendRequest(withSoapEnvelope(registerUserEnvelope("alice", "SecretPass1")))
-				.andExpect(clientOrSenderFault("Имя пользователя уже занято"))
-				.andExpect(xpath("//soapenv:Fault/detail/tns:RegisterUserFault/tns:code", NAMESPACES)
-						.evaluatesTo("USERNAME_ALREADY_EXISTS"));
+		client.sendRequest(withSoapEnvelope(authenticateUserEnvelope("alice", "SecretPass1")))
+				.andExpect(clientOrSenderFault("Неверное имя пользователя или пароль"))
+				.andExpect(xpath("//soapenv:Fault/detail/tns:AuthenticateUserFault/tns:code", NAMESPACES)
+						.evaluatesTo("INVALID_CREDENTIALS"));
 	}
 
-	private Source registerUserEnvelope(String username, String password) {
+	private Source authenticateUserEnvelope(String username, String password) {
 		return new StringSource("""
 				<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="urn:soap-messenger:v1">
 				  <soapenv:Body>
-				    <tns:RegisterUserRequest>
+				    <tns:AuthenticateUserRequest>
 				      <tns:username>%s</tns:username>
 				      <tns:password>%s</tns:password>
-				    </tns:RegisterUserRequest>
+				    </tns:AuthenticateUserRequest>
 				  </soapenv:Body>
 				</soapenv:Envelope>
 				""".formatted(username, password));
 	}
 
 	@Configuration
-	@Import(RegisterUserEndpoint.class)
+	@Import(AuthenticateUserEndpoint.class)
 	static class SoapFaultConfig {
 
 		@Bean
-		SoapFaultExceptionResolver registerUserFaultExceptionResolver() {
-			return new SoapFaultExceptionResolver(null, false);
+		SoapFaultExceptionResolver authenticateUserFaultExceptionResolver() {
+			return new SoapFaultExceptionResolver(null, true);
 		}
 
 	}
