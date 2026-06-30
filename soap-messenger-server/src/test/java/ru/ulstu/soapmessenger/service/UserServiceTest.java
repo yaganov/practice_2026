@@ -44,6 +44,7 @@ import ru.ulstu.soapmessenger.exception.ServiceException;
 import ru.ulstu.soapmessenger.model.User;
 import ru.ulstu.soapmessenger.repository.UserRepository;
 import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
+import ru.ulstu.soapmessenger.soap.generated.UserType;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -151,6 +152,31 @@ class UserServiceTest {
 
 		assertEquals(ServiceErrorCodeType.INVALID_CREDENTIALS, ex.getCode());
 		assertEquals("Неверное имя пользователя или пароль", ex.getMessage());
+	}
+
+	@Test
+	void findUser_success() {
+		UUID userId = UUID.randomUUID();
+		User user = new User();
+		user.setUserId(userId);
+		user.setUsername(TEST_USERNAME);
+
+		when(userRepository.findByUsername(TEST_USERNAME)).thenReturn(java.util.Optional.of(user));
+
+		UserType result = userService.findUser(TEST_USERNAME);
+
+		assertEquals(userId.toString(), result.getUserId());
+		assertEquals(TEST_USERNAME, result.getUsername());
+	}
+
+	@Test
+	void findUser_userNotFound() {
+		when(userRepository.findByUsername(TEST_USERNAME)).thenReturn(java.util.Optional.empty());
+
+		ServiceException ex = assertThrows(ServiceException.class, () -> userService.findUser(TEST_USERNAME));
+
+		assertEquals(ServiceErrorCodeType.USER_NOT_FOUND, ex.getCode());
+		assertEquals("Пользователь не найден", ex.getMessage());
 	}
 
 	private static Stream<Arguments> invalidCredentialsCases() {

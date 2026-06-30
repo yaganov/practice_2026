@@ -91,8 +91,9 @@ class AuthenticateUserEndpointSoapTest {
 	static class SoapFaultConfig {
 
 		@Bean
-		SoapFaultExceptionResolver authenticateUserFaultExceptionResolver() {
-			return new SoapFaultExceptionResolver(null, true);
+		SoapFaultExceptionResolver authenticateUserFaultExceptionResolver(
+				AuthenticateUserEndpoint authenticateUserEndpoint) {
+			return new SoapFaultExceptionResolver(authenticateUserEndpoint, true);
 		}
 
 	}

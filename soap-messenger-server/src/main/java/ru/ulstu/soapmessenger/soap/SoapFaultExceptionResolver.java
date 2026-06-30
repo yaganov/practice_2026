@@ -18,6 +18,10 @@ import ru.ulstu.soapmessenger.soap.generated.ServiceFaultType;
 
 public class SoapFaultExceptionResolver extends AbstractSoapFaultDefinitionExceptionResolver {
 
+	public static final int FAULT_DETAIL_REGISTER = 0;
+	public static final int FAULT_DETAIL_AUTHENTICATE = 1;
+	public static final int FAULT_DETAIL_FIND_USER = 2;
+
 	private static final String INTERNAL_ERROR_MESSAGE = "Внутренняя ошибка сервера";
 	private static final FaultMapping INTERNAL_ERROR_MAPPING =
 			new FaultMapping(SoapFaultDefinition.SERVER, INTERNAL_ERROR_MESSAGE,
@@ -25,13 +29,18 @@ public class SoapFaultExceptionResolver extends AbstractSoapFaultDefinitionExcep
 
 	private final ObjectFactory objectFactory = new ObjectFactory();
 	private final Jaxb2Marshaller marshaller;
-	private final boolean authenticateFault;
+	private final int faultDetailType;
 
 	public SoapFaultExceptionResolver(Object endpoint, boolean authenticateFault) {
+		this(endpoint, authenticateFault ? FAULT_DETAIL_AUTHENTICATE : FAULT_DETAIL_REGISTER);
+	}
+
+	public SoapFaultExceptionResolver(Object endpoint, int faultDetailType) {
+		setOrder(1);
 		if (endpoint != null) {
 			setMappedEndpoints(Set.of(endpoint));
 		}
-		this.authenticateFault = authenticateFault;
+		this.faultDetailType = faultDetailType;
 		marshaller = new Jaxb2Marshaller();
 		marshaller.setContextPath("ru.ulstu.soapmessenger.soap.generated");
 		try {
@@ -87,10 +96,11 @@ public class SoapFaultExceptionResolver extends AbstractSoapFaultDefinitionExcep
 	}
 
 	private JAXBElement<ServiceFaultType> createFaultElement(ServiceFaultType faultDetail) {
-		if (authenticateFault) {
-			return objectFactory.createAuthenticateUserFault(faultDetail);
-		}
-		return objectFactory.createRegisterUserFault(faultDetail);
+		return switch (faultDetailType) {
+			case FAULT_DETAIL_AUTHENTICATE -> objectFactory.createAuthenticateUserFault(faultDetail);
+			case FAULT_DETAIL_FIND_USER -> objectFactory.createFindUserFault(faultDetail);
+			default -> objectFactory.createRegisterUserFault(faultDetail);
+		};
 	}
 
 	private record FaultMapping(

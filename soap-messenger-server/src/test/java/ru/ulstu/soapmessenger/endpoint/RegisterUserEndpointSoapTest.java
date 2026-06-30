@@ -92,8 +92,8 @@ class RegisterUserEndpointSoapTest {
 	static class SoapFaultConfig {
 
 		@Bean
-		SoapFaultExceptionResolver registerUserFaultExceptionResolver() {
-			return new SoapFaultExceptionResolver(null, false);
+		SoapFaultExceptionResolver registerUserFaultExceptionResolver(RegisterUserEndpoint registerUserEndpoint) {
+			return new SoapFaultExceptionResolver(registerUserEndpoint, false);
 		}
 
 	}

@@ -5,19 +5,25 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.ws.config.annotation.EnableWs;
+import org.springframework.ws.soap.server.endpoint.interceptor.PayloadRootSmartSoapEndpointInterceptor;
 import org.springframework.ws.transport.http.MessageDispatcherServlet;
 import org.springframework.ws.wsdl.wsdl11.DefaultWsdl11Definition;
 import org.springframework.xml.xsd.SimpleXsdSchema;
 import org.springframework.xml.xsd.XsdSchema;
 
 import ru.ulstu.soapmessenger.endpoint.AuthenticateUserEndpoint;
+import ru.ulstu.soapmessenger.endpoint.FindUserEndpoint;
 import ru.ulstu.soapmessenger.endpoint.RegisterUserEndpoint;
+import ru.ulstu.soapmessenger.soap.JwtAuthenticationInterceptor;
 import ru.ulstu.soapmessenger.soap.SoapFaultExceptionResolver;
 
 @Configuration
 @EnableWs
 public class WebServiceConfig {
+
+	private static final String NAMESPACE = "urn:soap-messenger:v1";
 
 	@Bean
 	public ServletRegistrationBean<MessageDispatcherServlet> messageDispatcherServlet(ApplicationContext applicationContext) {
@@ -32,7 +38,7 @@ public class WebServiceConfig {
 		DefaultWsdl11Definition wsdl11Definition = new DefaultWsdl11Definition();
 		wsdl11Definition.setPortTypeName("SoapMessengerPort");
 		wsdl11Definition.setLocationUri("/ws");
-		wsdl11Definition.setTargetNamespace("urn:soap-messenger:v1");
+		wsdl11Definition.setTargetNamespace(NAMESPACE);
 		wsdl11Definition.setSchema(soapMessengerSchema);
 		return wsdl11Definition;
 	}
@@ -40,6 +46,17 @@ public class WebServiceConfig {
 	@Bean
 	public XsdSchema soapMessengerSchema() {
 		return new SimpleXsdSchema(new ClassPathResource("META-INF/schemas/soap-messenger.xsd"));
+	}
+
+	@Bean
+	public JwtAuthenticationInterceptor jwtAuthenticationInterceptor(JwtDecoder jwtDecoder) {
+		return new JwtAuthenticationInterceptor(jwtDecoder);
+	}
+
+	@Bean
+	public PayloadRootSmartSoapEndpointInterceptor findUserJwtAuthenticationInterceptor(
+			JwtAuthenticationInterceptor jwtAuthenticationInterceptor) {
+		return new PayloadRootSmartSoapEndpointInterceptor(jwtAuthenticationInterceptor, NAMESPACE, "FindUserRequest");
 	}
 
 	@Bean
@@ -51,6 +68,11 @@ public class WebServiceConfig {
 	public SoapFaultExceptionResolver authenticateUserFaultExceptionResolver(
 			AuthenticateUserEndpoint authenticateUserEndpoint) {
 		return new SoapFaultExceptionResolver(authenticateUserEndpoint, true);
+	}
+
+	@Bean
+	public SoapFaultExceptionResolver findUserFaultExceptionResolver(FindUserEndpoint findUserEndpoint) {
+		return new SoapFaultExceptionResolver(findUserEndpoint, SoapFaultExceptionResolver.FAULT_DETAIL_FIND_USER);
 	}
 
 }
