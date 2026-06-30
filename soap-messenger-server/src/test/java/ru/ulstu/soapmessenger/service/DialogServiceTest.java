@@ -231,6 +231,100 @@ class DialogServiceTest {
 		assertTrue(result.isEmpty());
 	}
 
+	@Test
+	void sendMessage_savesMessageForParticipant() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		UUID clientMessageId = UUID.randomUUID();
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(true);
+		when(messageRepository.findByClientMessageId(clientMessageId)).thenReturn(Optional.empty());
+		when(messageRepository.saveAndFlush(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		Message result = dialogService.sendMessage(currentUserId, dialogId, clientMessageId, "hello");
+
+		assertNotNull(result.getMessageId());
+		assertEquals(dialogId, result.getDialogId());
+		assertEquals(currentUserId, result.getSenderId());
+		assertEquals(clientMessageId, result.getClientMessageId());
+		assertEquals("hello", result.getContent());
+		assertNotNull(result.getCreatedAt());
+		verify(messageRepository).saveAndFlush(any(Message.class));
+	}
+
+	@Test
+	void sendMessage_sameClientMessageIdReturnsExistingWithoutDuplicate() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		UUID clientMessageId = UUID.randomUUID();
+		Message existingMessage = createMessage(UUID.randomUUID(), dialogId, currentUserId, "hello",
+				LocalDateTime.of(2026, 3, 10, 12, 0));
+		existingMessage.setClientMessageId(clientMessageId);
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(true);
+		when(messageRepository.findByClientMessageId(clientMessageId)).thenReturn(Optional.of(existingMessage));
+
+		Message result = dialogService.sendMessage(currentUserId, dialogId, clientMessageId, "hello");
+
+		assertEquals(existingMessage.getMessageId(), result.getMessageId());
+		verify(messageRepository, never()).saveAndFlush(any(Message.class));
+	}
+
+	@Test
+	void sendMessage_sameClientMessageIdDifferentContentValidationError() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		UUID clientMessageId = UUID.randomUUID();
+		Message existingMessage = createMessage(UUID.randomUUID(), dialogId, currentUserId, "hello",
+				LocalDateTime.of(2026, 3, 10, 12, 0));
+		existingMessage.setClientMessageId(clientMessageId);
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(true);
+		when(messageRepository.findByClientMessageId(clientMessageId)).thenReturn(Optional.of(existingMessage));
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> dialogService.sendMessage(currentUserId, dialogId, clientMessageId, "world"));
+
+		assertEquals(ServiceErrorCodeType.VALIDATION_ERROR, ex.getCode());
+		assertEquals("Идентификатор клиентского сообщения уже использован", ex.getMessage());
+		verify(messageRepository, never()).saveAndFlush(any(Message.class));
+	}
+
+	@Test
+	void sendMessage_accessDenied() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(false);
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> dialogService.sendMessage(currentUserId, dialogId, UUID.randomUUID(), "hello"));
+
+		assertEquals(ServiceErrorCodeType.ACCESS_DENIED, ex.getCode());
+		verify(messageRepository, never()).findByClientMessageId(any());
+		verify(messageRepository, never()).saveAndFlush(any(Message.class));
+	}
+
+	@Test
+	void sendMessage_blankContentValidationError() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(true);
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> dialogService.sendMessage(currentUserId, dialogId, UUID.randomUUID(), "   "));
+
+		assertEquals(ServiceErrorCodeType.VALIDATION_ERROR, ex.getCode());
+		assertEquals("Сообщение не может быть пустым", ex.getMessage());
+		verify(messageRepository, never()).saveAndFlush(any(Message.class));
+	}
+
 	private static User createUser(UUID userId, String username) {
 		User user = new User();
 		user.setUserId(userId);

@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import javax.xml.datatype.DatatypeConfigurationException;
@@ -32,6 +33,8 @@ public class DialogService {
 	private static final String SELF_DIALOG_MESSAGE = "Нельзя создать диалог с самим собой";
 	private static final String DIALOG_NOT_FOUND_MESSAGE = "Диалог не найден";
 	private static final String ACCESS_DENIED_MESSAGE = "Нет доступа к диалогу";
+	private static final String CONTENT_BLANK_MESSAGE = "Сообщение не может быть пустым";
+	private static final String CLIENT_MESSAGE_ID_CONFLICT_MESSAGE = "Идентификатор клиентского сообщения уже использован";
 
 	private final DialogRepository dialogRepository;
 	private final UserRepository userRepository;
@@ -78,6 +81,42 @@ public class DialogService {
 		return messageRepository.findByDialogIdOrderByCreatedAtAsc(dialogId).stream()
 				.map(this::toMessageType)
 				.toList();
+	}
+
+	@Transactional
+	public Message sendMessage(UUID currentUserId, UUID dialogId, UUID clientMessageId, String content) {
+		if (!dialogRepository.existsById(dialogId)) {
+			throw new ServiceException(ServiceErrorCodeType.DIALOG_NOT_FOUND, DIALOG_NOT_FOUND_MESSAGE);
+		}
+		if (!dialogRepository.isParticipant(dialogId, currentUserId)) {
+			throw new ServiceException(ServiceErrorCodeType.ACCESS_DENIED, ACCESS_DENIED_MESSAGE);
+		}
+		validateMessageContent(content);
+
+		Optional<Message> existingMessage = messageRepository.findByClientMessageId(clientMessageId);
+		if (existingMessage.isPresent()) {
+			Message message = existingMessage.get();
+			if (message.getDialogId().equals(dialogId) && message.getSenderId().equals(currentUserId)
+					&& message.getContent().equals(content)) {
+				return message;
+			}
+			throw new ServiceException(ServiceErrorCodeType.VALIDATION_ERROR, CLIENT_MESSAGE_ID_CONFLICT_MESSAGE);
+		}
+
+		Message message = new Message();
+		message.setMessageId(UUID.randomUUID());
+		message.setDialogId(dialogId);
+		message.setSenderId(currentUserId);
+		message.setClientMessageId(clientMessageId);
+		message.setContent(content);
+		message.setCreatedAt(LocalDateTime.now());
+		return messageRepository.saveAndFlush(message);
+	}
+
+	private void validateMessageContent(String content) {
+		if (content == null || content.isBlank()) {
+			throw new ServiceException(ServiceErrorCodeType.VALIDATION_ERROR, CONTENT_BLANK_MESSAGE);
+		}
 	}
 
 	private DialogSummaryType toDialogSummary(Object[] row) {

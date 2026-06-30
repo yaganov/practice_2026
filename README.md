@@ -19,6 +19,46 @@ make up
 
 **WSDL:** http://localhost:8080/ws/soap-messenger.wsdl
 
+## WebSocket
+
+Endpoint: `ws://localhost:8080/websocket`
+
+Авторизация при handshake: HTTP-заголовок `Authorization: Bearer <JWT>`.
+
+Входящее сообщение:
+
+```json
+{
+  "type": "sendMessage",
+  "dialogId": "UUID",
+  "clientMessageId": "UUID",
+  "content": "текст сообщения"
+}
+```
+
+Исходящее событие:
+
+```json
+{
+  "type": "message",
+  "messageId": "UUID",
+  "dialogId": "UUID",
+  "senderId": "UUID",
+  "content": "текст сообщения",
+  "createdAt": "ISO-8601 datetime"
+}
+```
+
+Ошибка:
+
+```json
+{
+  "type": "error",
+  "code": "SERVICE_ERROR_CODE",
+  "message": "безопасное сообщение"
+}
+```
+
 ## Как устроено
 * **XSD** — `soap-messenger-server/src/main/resources/META-INF/schemas/soap-messenger.xsd`
 * **WSDL** генерируется из XSD при старте приложения
