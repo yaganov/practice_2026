@@ -55,4 +55,12 @@ public interface DialogRepository extends JpaRepository<Dialog, UUID> {
 			""", nativeQuery = true)
 	List<Object[]> findPersonalDialogsWithInterlocutor(@Param("currentUserId") UUID currentUserId);
 
+	@Query(value = """
+			SELECT EXISTS (
+				SELECT 1 FROM dialog_participants
+				WHERE dialog_id = :dialogId AND user_id = :userId
+			)
+			""", nativeQuery = true)
+	boolean isParticipant(@Param("dialogId") UUID dialogId, @Param("userId") UUID userId);
+
 }

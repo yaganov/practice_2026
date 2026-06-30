@@ -16,6 +16,7 @@ import org.springframework.xml.xsd.XsdSchema;
 import ru.ulstu.soapmessenger.endpoint.AuthenticateUserEndpoint;
 import ru.ulstu.soapmessenger.endpoint.FindUserEndpoint;
 import ru.ulstu.soapmessenger.endpoint.GetDialogsEndpoint;
+import ru.ulstu.soapmessenger.endpoint.GetMessageHistoryEndpoint;
 import ru.ulstu.soapmessenger.endpoint.OpenOrCreateDialogEndpoint;
 import ru.ulstu.soapmessenger.endpoint.RegisterUserEndpoint;
 import ru.ulstu.soapmessenger.soap.JwtAuthenticationInterceptor;
@@ -75,6 +76,13 @@ public class WebServiceConfig {
 	}
 
 	@Bean
+	public PayloadRootSmartSoapEndpointInterceptor getMessageHistoryJwtAuthenticationInterceptor(
+			JwtAuthenticationInterceptor jwtAuthenticationInterceptor) {
+		return new PayloadRootSmartSoapEndpointInterceptor(jwtAuthenticationInterceptor, NAMESPACE,
+				"GetMessageHistoryRequest");
+	}
+
+	@Bean
 	public SoapFaultExceptionResolver registerUserFaultExceptionResolver(RegisterUserEndpoint registerUserEndpoint) {
 		return new SoapFaultExceptionResolver(registerUserEndpoint, false);
 	}
@@ -100,6 +108,13 @@ public class WebServiceConfig {
 	@Bean
 	public SoapFaultExceptionResolver getDialogsFaultExceptionResolver(GetDialogsEndpoint getDialogsEndpoint) {
 		return new SoapFaultExceptionResolver(getDialogsEndpoint, SoapFaultExceptionResolver.FAULT_DETAIL_GET_DIALOGS);
+	}
+
+	@Bean
+	public SoapFaultExceptionResolver getMessageHistoryFaultExceptionResolver(
+			GetMessageHistoryEndpoint getMessageHistoryEndpoint) {
+		return new SoapFaultExceptionResolver(getMessageHistoryEndpoint,
+				SoapFaultExceptionResolver.FAULT_DETAIL_GET_MESSAGE_HISTORY);
 	}
 
 }

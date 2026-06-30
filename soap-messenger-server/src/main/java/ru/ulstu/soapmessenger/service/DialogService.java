@@ -15,10 +15,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ru.ulstu.soapmessenger.exception.ServiceException;
 import ru.ulstu.soapmessenger.model.Dialog;
+import ru.ulstu.soapmessenger.model.Message;
 import ru.ulstu.soapmessenger.model.User;
 import ru.ulstu.soapmessenger.repository.DialogRepository;
+import ru.ulstu.soapmessenger.repository.MessageRepository;
 import ru.ulstu.soapmessenger.repository.UserRepository;
 import ru.ulstu.soapmessenger.soap.generated.DialogSummaryType;
+import ru.ulstu.soapmessenger.soap.generated.MessageType;
 import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
 import ru.ulstu.soapmessenger.soap.generated.UserType;
 
@@ -27,13 +30,18 @@ public class DialogService {
 
 	private static final String USER_NOT_FOUND_MESSAGE = "Пользователь не найден";
 	private static final String SELF_DIALOG_MESSAGE = "Нельзя создать диалог с самим собой";
+	private static final String DIALOG_NOT_FOUND_MESSAGE = "Диалог не найден";
+	private static final String ACCESS_DENIED_MESSAGE = "Нет доступа к диалогу";
 
 	private final DialogRepository dialogRepository;
 	private final UserRepository userRepository;
+	private final MessageRepository messageRepository;
 
-	public DialogService(DialogRepository dialogRepository, UserRepository userRepository) {
+	public DialogService(DialogRepository dialogRepository, UserRepository userRepository,
+			MessageRepository messageRepository) {
 		this.dialogRepository = dialogRepository;
 		this.userRepository = userRepository;
+		this.messageRepository = messageRepository;
 	}
 
 	@Transactional
@@ -56,6 +64,19 @@ public class DialogService {
 	public List<DialogSummaryType> getDialogs(UUID currentUserId) {
 		return dialogRepository.findPersonalDialogsWithInterlocutor(currentUserId).stream()
 				.map(this::toDialogSummary)
+				.toList();
+	}
+
+	@Transactional(readOnly = true)
+	public List<MessageType> getMessageHistory(UUID currentUserId, UUID dialogId) {
+		if (!dialogRepository.existsById(dialogId)) {
+			throw new ServiceException(ServiceErrorCodeType.DIALOG_NOT_FOUND, DIALOG_NOT_FOUND_MESSAGE);
+		}
+		if (!dialogRepository.isParticipant(dialogId, currentUserId)) {
+			throw new ServiceException(ServiceErrorCodeType.ACCESS_DENIED, ACCESS_DENIED_MESSAGE);
+		}
+		return messageRepository.findByDialogIdOrderByCreatedAtAsc(dialogId).stream()
+				.map(this::toMessageType)
 				.toList();
 	}
 
@@ -91,6 +112,15 @@ public class DialogService {
 		dialogSummary.setInterlocutor(interlocutorType);
 		dialogSummary.setCreatedAt(toXmlDateTime(dialog.getCreatedAt()));
 		return dialogSummary;
+	}
+
+	private MessageType toMessageType(Message message) {
+		MessageType messageType = new MessageType();
+		messageType.setMessageId(message.getMessageId().toString());
+		messageType.setSenderId(message.getSenderId().toString());
+		messageType.setContent(message.getContent());
+		messageType.setCreatedAt(toXmlDateTime(message.getCreatedAt()));
+		return messageType;
 	}
 
 	private static XMLGregorianCalendar toXmlDateTime(LocalDateTime dateTime) {

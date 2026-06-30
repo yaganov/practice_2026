@@ -23,10 +23,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import ru.ulstu.soapmessenger.exception.ServiceException;
 import ru.ulstu.soapmessenger.model.Dialog;
+import ru.ulstu.soapmessenger.model.Message;
 import ru.ulstu.soapmessenger.model.User;
 import ru.ulstu.soapmessenger.repository.DialogRepository;
+import ru.ulstu.soapmessenger.repository.MessageRepository;
 import ru.ulstu.soapmessenger.repository.UserRepository;
 import ru.ulstu.soapmessenger.soap.generated.DialogSummaryType;
+import ru.ulstu.soapmessenger.soap.generated.MessageType;
 import ru.ulstu.soapmessenger.soap.generated.ServiceErrorCodeType;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,11 +43,14 @@ class DialogServiceTest {
 	@Mock
 	private UserRepository userRepository;
 
+	@Mock
+	private MessageRepository messageRepository;
+
 	private DialogService dialogService;
 
 	@BeforeEach
 	void setUp() {
-		dialogService = new DialogService(dialogRepository, userRepository);
+		dialogService = new DialogService(dialogRepository, userRepository, messageRepository);
 	}
 
 	@Test
@@ -153,11 +159,95 @@ class DialogServiceTest {
 		assertTrue(result.isEmpty());
 	}
 
+	@Test
+	void getMessageHistory_returnsMessagesInChronologicalOrder() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		UUID firstMessageId = UUID.randomUUID();
+		UUID secondMessageId = UUID.randomUUID();
+		LocalDateTime firstCreatedAt = LocalDateTime.of(2026, 3, 10, 10, 0);
+		LocalDateTime secondCreatedAt = LocalDateTime.of(2026, 3, 10, 11, 0);
+
+		Message firstMessage = createMessage(firstMessageId, dialogId, currentUserId, "hello", firstCreatedAt);
+		Message secondMessage = createMessage(secondMessageId, dialogId, UUID.randomUUID(), "world", secondCreatedAt);
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(true);
+		when(messageRepository.findByDialogIdOrderByCreatedAtAsc(dialogId))
+				.thenReturn(List.of(firstMessage, secondMessage));
+
+		List<MessageType> result = dialogService.getMessageHistory(currentUserId, dialogId);
+
+		assertEquals(2, result.size());
+		assertEquals(firstMessageId.toString(), result.get(0).getMessageId());
+		assertEquals("hello", result.get(0).getContent());
+		assertEquals(secondMessageId.toString(), result.get(1).getMessageId());
+		assertEquals("world", result.get(1).getContent());
+	}
+
+	@Test
+	void getMessageHistory_accessDenied() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(false);
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> dialogService.getMessageHistory(currentUserId, dialogId));
+
+		assertEquals(ServiceErrorCodeType.ACCESS_DENIED, ex.getCode());
+		assertEquals("Нет доступа к диалогу", ex.getMessage());
+		verify(messageRepository, never()).findByDialogIdOrderByCreatedAtAsc(any());
+	}
+
+	@Test
+	void getMessageHistory_dialogNotFound() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(false);
+
+		ServiceException ex = assertThrows(ServiceException.class,
+				() -> dialogService.getMessageHistory(currentUserId, dialogId));
+
+		assertEquals(ServiceErrorCodeType.DIALOG_NOT_FOUND, ex.getCode());
+		assertEquals("Диалог не найден", ex.getMessage());
+		verify(dialogRepository, never()).isParticipant(any(), any());
+		verify(messageRepository, never()).findByDialogIdOrderByCreatedAtAsc(any());
+	}
+
+	@Test
+	void getMessageHistory_returnsEmptyList() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+
+		when(dialogRepository.existsById(dialogId)).thenReturn(true);
+		when(dialogRepository.isParticipant(dialogId, currentUserId)).thenReturn(true);
+		when(messageRepository.findByDialogIdOrderByCreatedAtAsc(dialogId)).thenReturn(List.of());
+
+		List<MessageType> result = dialogService.getMessageHistory(currentUserId, dialogId);
+
+		assertTrue(result.isEmpty());
+	}
+
 	private static User createUser(UUID userId, String username) {
 		User user = new User();
 		user.setUserId(userId);
 		user.setUsername(username);
 		return user;
+	}
+
+	private static Message createMessage(UUID messageId, UUID dialogId, UUID senderId, String content,
+			LocalDateTime createdAt) {
+		Message message = new Message();
+		message.setMessageId(messageId);
+		message.setDialogId(dialogId);
+		message.setSenderId(senderId);
+		message.setClientMessageId(UUID.randomUUID());
+		message.setContent(content);
+		message.setCreatedAt(createdAt);
+		return message;
 	}
 
 }
