@@ -1,20 +1,34 @@
-This is a Kotlin Multiplatform project targeting Android.
+# SOAP Messenger Client
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+Kotlin Multiplatform-клиент (Android) для учебного мессенджера.
 
-### Running the apps
+## Запуск сервера
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
+Из корня репозитория:
 
-- Android app: `./gradlew :androidApp:assembleDebug`
+```bash
+docker compose up --build -d
+```
 
----
+Сервер доступен на порту `8080`.
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+## Запуск клиента
+
+```bash
+cd soap-messenger-client
+gradlew.bat :androidApp:assembleDebug
+```
+
+Установите APK на Android Emulator и запустите приложение.
+
+## Сеть
+
+Эмулятор Android обращается к хост-машине по адресу `10.0.2.2`.
+SOAP endpoint клиента: `http://10.0.2.2:8080/ws`.
+
+В debug-сборке разрешён HTTP-только для `10.0.2.2`.
+
+## Текущие возможности
+
+- регистрация пользователя (`RegisterUser`);
+- вход (`AuthenticateUser`).
