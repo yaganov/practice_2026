@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -41,15 +39,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val ScreenBackground = Color(0xFFF5F6F8)
-private val GraphiteText = Color(0xFF1F2933)
-private val MutedText = Color(0xFF52606D)
-private val AccentBlue = Color(0xFF1B3A5C)
-private val FieldBorder = Color(0xFFCBD2D9)
-private val StatusErrorBackground = Color(0xFFFBEAEA)
-private val StatusErrorText = Color(0xFF9B1C1C)
-private val StatusSuccessBackground = Color(0xFFE8F5E9)
-private val StatusSuccessText = Color(0xFF1B5E20)
+private val FieldShape = RoundedCornerShape(12.dp)
+private val ButtonHeight = 52.dp
 
 private enum class AuthMode {
     Login,
@@ -85,23 +76,21 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(ScreenBackground)
+                .background(AppPalette.screenBackground)
                 .safeContentPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 24.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
                 text = "SOAP Messenger",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.5.sp,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.4.sp,
                 ),
-                color = AccentBlue,
+                color = AppPalette.accent,
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             AuthHeader(mode = mode)
 
@@ -120,8 +109,6 @@ fun AuthScreen(
                 visualTransformation = PasswordVisualTransformation(),
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
-
             Button(
                 onClick = {
                     when (mode) {
@@ -132,18 +119,30 @@ fun AuthScreen(
                 enabled = fieldsEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentBlue,
-                    contentColor = Color.White,
-                    disabledContainerColor = AccentBlue.copy(alpha = 0.4f),
-                    disabledContentColor = Color.White.copy(alpha = 0.7f),
-                ),
+                    .height(ButtonHeight),
+                shape = FieldShape,
+                colors = primaryButtonColors(),
             ) {
                 Text(
                     text = if (mode == AuthMode.Login) "Войти" else "Зарегистрироваться",
                     fontWeight = FontWeight.Medium,
+                )
+            }
+
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .align(Alignment.CenterHorizontally),
+                    color = AppPalette.accent,
+                    strokeWidth = 2.dp,
+                )
+            }
+
+            statusMessage?.let { message ->
+                StatusMessageBlock(
+                    message = message,
+                    isSuccess = isLoggedIn || statusIsSuccess,
                 )
             }
 
@@ -162,25 +161,8 @@ fun AuthScreen(
                     } else {
                         "Уже есть аккаунт? Войти"
                     },
-                    color = AccentBlue,
+                    color = AppPalette.accent,
                     textAlign = TextAlign.Center,
-                )
-            }
-
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .align(Alignment.CenterHorizontally),
-                    color = AccentBlue,
-                    strokeWidth = 2.dp,
-                )
-            }
-
-            statusMessage?.let { message ->
-                StatusMessageBlock(
-                    message = message,
-                    isSuccess = isLoggedIn || statusIsSuccess,
                 )
             }
         }
@@ -199,7 +181,7 @@ private fun AuthTextField(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MutedText,
+            color = AppPalette.textSecondary,
         )
         OutlinedTextField(
             value = value,
@@ -209,29 +191,20 @@ private fun AuthTextField(
             visualTransformation = visualTransformation,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = authFieldColors(),
+                .height(ButtonHeight),
+            shape = FieldShape,
+            colors = fieldColors(),
         )
     }
 }
 
 @Composable
 private fun AuthHeader(mode: AuthMode) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = if (mode == AuthMode.Login) "Вход" else "Создание аккаунта",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = GraphiteText,
-        )
-        Text(
-            text = if (mode == AuthMode.Login) {
-                "Введите данные учётной записи"
-            } else {
-                "Создайте учётную запись для начала общения"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MutedText,
+            text = if (mode == AuthMode.Login) "Вход" else "Регистрация",
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = AppPalette.textPrimary,
         )
     }
 }
@@ -242,27 +215,37 @@ private fun StatusMessageBlock(message: String, isSuccess: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = if (isSuccess) StatusSuccessBackground else StatusErrorBackground,
-                shape = RoundedCornerShape(8.dp),
+                color = if (isSuccess) AppPalette.statusSuccessBackground else AppPalette.statusErrorBackground,
+                shape = FieldShape,
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (isSuccess) StatusSuccessText else StatusErrorText,
+            color = if (isSuccess) AppPalette.statusSuccessText else AppPalette.statusErrorText,
         )
     }
 }
 
 @Composable
-private fun authFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = AccentBlue,
-    unfocusedBorderColor = FieldBorder,
-    disabledBorderColor = FieldBorder.copy(alpha = 0.6f),
-    cursorColor = AccentBlue,
-    focusedTextColor = GraphiteText,
-    unfocusedTextColor = GraphiteText,
+private fun primaryButtonColors() = ButtonDefaults.buttonColors(
+    containerColor = AppPalette.accent,
+    contentColor = AppPalette.onAccent,
+    disabledContainerColor = AppPalette.accent.copy(alpha = 0.45f),
+    disabledContentColor = AppPalette.onAccent.copy(alpha = 0.8f),
+)
+
+@Composable
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = AppPalette.accent,
+    unfocusedBorderColor = AppPalette.border,
+    disabledBorderColor = AppPalette.border.copy(alpha = 0.6f),
+    cursorColor = AppPalette.accent,
+    focusedTextColor = AppPalette.textPrimary,
+    unfocusedTextColor = AppPalette.textPrimary,
+    focusedContainerColor = AppPalette.surface,
+    unfocusedContainerColor = AppPalette.surface,
 )
 
 @Preview(

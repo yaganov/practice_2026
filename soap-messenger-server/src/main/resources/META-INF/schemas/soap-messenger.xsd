@@ -67,6 +67,8 @@
             <xs:element name="dialogId" type="tns:UuidType"/>
             <xs:element name="interlocutor" type="tns:UserType"/>
             <xs:element name="createdAt" type="xs:dateTime"/>
+            <xs:element name="lastMessageContent" type="tns:NonEmptyStringType" minOccurs="0"/>
+            <xs:element name="lastMessageCreatedAt" type="xs:dateTime" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 

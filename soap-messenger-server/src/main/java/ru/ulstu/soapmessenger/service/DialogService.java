@@ -122,13 +122,18 @@ public class DialogService {
 	private DialogSummaryType toDialogSummary(Object[] row) {
 		Dialog dialog = new Dialog();
 		dialog.setDialogId((UUID) row[0]);
-		dialog.setCreatedAt((LocalDateTime) row[1]);
+		dialog.setCreatedAt(toLocalDateTime(row[1]));
 
 		User interlocutor = new User();
 		interlocutor.setUserId((UUID) row[2]);
 		interlocutor.setUsername((String) row[3]);
 
-		return toDialogSummary(dialog, interlocutor);
+		DialogSummaryType dialogSummary = toDialogSummary(dialog, interlocutor);
+		if (row.length > 4 && row[4] != null) {
+			dialogSummary.setLastMessageContent((String) row[4]);
+			dialogSummary.setLastMessageCreatedAt(toXmlDateTime(toLocalDateTime(row[5])));
+		}
+		return dialogSummary;
 	}
 
 	private Dialog createDialog(UUID currentUserId, UUID otherUserId) {
@@ -170,6 +175,16 @@ public class DialogService {
 		catch (DatatypeConfigurationException ex) {
 			throw new IllegalStateException("Failed to convert date time", ex);
 		}
+	}
+
+	private static LocalDateTime toLocalDateTime(Object value) {
+		if (value instanceof LocalDateTime localDateTime) {
+			return localDateTime;
+		}
+		if (value instanceof java.sql.Timestamp timestamp) {
+			return timestamp.toLocalDateTime();
+		}
+		throw new IllegalStateException("Unsupported date time type: " + value.getClass());
 	}
 
 }

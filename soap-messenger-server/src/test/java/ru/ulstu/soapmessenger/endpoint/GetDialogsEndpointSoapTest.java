@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.transform.Source;
 
 import org.junit.jupiter.api.AfterEach;
@@ -78,6 +80,8 @@ class GetDialogsEndpointSoapTest {
 		DialogSummaryType dialogSummary = new DialogSummaryType();
 		dialogSummary.setDialogId(dialogId.toString());
 		dialogSummary.setInterlocutor(interlocutor);
+		dialogSummary.setLastMessageContent("hello");
+		dialogSummary.setLastMessageCreatedAt(xmlDateTime("2026-03-12T18:45:00"));
 
 		when(dialogService.getDialogs(eq(currentUserId))).thenReturn(List.of(dialogSummary));
 
@@ -89,7 +93,36 @@ class GetDialogsEndpointSoapTest {
 				.andExpect(xpath("//tns:GetDialogsResponse/tns:dialog/tns:interlocutor/tns:userId", NAMESPACES)
 						.evaluatesTo(otherUserId.toString()))
 				.andExpect(xpath("//tns:GetDialogsResponse/tns:dialog/tns:interlocutor/tns:username", NAMESPACES)
-						.evaluatesTo("bob"));
+						.evaluatesTo("bob"))
+				.andExpect(xpath("//tns:GetDialogsResponse/tns:dialog/tns:lastMessageContent", NAMESPACES)
+						.evaluatesTo("hello"))
+				.andExpect(xpath("//tns:GetDialogsResponse/tns:dialog/tns:lastMessageCreatedAt", NAMESPACES)
+						.exists());
+	}
+
+	@Test
+	void getDialogs_emptyDialogWithoutLastMessage() throws Exception {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		UUID otherUserId = UUID.randomUUID();
+
+		UserType interlocutor = new UserType();
+		interlocutor.setUserId(otherUserId.toString());
+		interlocutor.setUsername("bob");
+
+		DialogSummaryType dialogSummary = new DialogSummaryType();
+		dialogSummary.setDialogId(dialogId.toString());
+		dialogSummary.setInterlocutor(interlocutor);
+
+		when(dialogService.getDialogs(eq(currentUserId))).thenReturn(List.of(dialogSummary));
+
+		withBearerToken(createToken(currentUserId));
+		client.sendRequest(withSoapEnvelope(getDialogsEnvelope()))
+				.andExpect(noFault())
+				.andExpect(xpath("//tns:GetDialogsResponse/tns:dialog/tns:dialogId", NAMESPACES)
+						.evaluatesTo(dialogId.toString()))
+				.andExpect(xpath("//tns:GetDialogsResponse/tns:dialog/tns:lastMessageContent", NAMESPACES).doesNotExist())
+				.andExpect(xpath("//tns:GetDialogsResponse/tns:dialog/tns:lastMessageCreatedAt", NAMESPACES).doesNotExist());
 	}
 
 	@Test
@@ -126,6 +159,10 @@ class GetDialogsEndpointSoapTest {
 				  </soapenv:Body>
 				</soapenv:Envelope>
 				""");
+	}
+
+	private static XMLGregorianCalendar xmlDateTime(String value) throws Exception {
+		return DatatypeFactory.newInstance().newXMLGregorianCalendar(value);
 	}
 
 	@Configuration

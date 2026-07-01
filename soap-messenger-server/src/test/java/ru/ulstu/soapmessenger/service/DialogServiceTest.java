@@ -137,7 +137,7 @@ class DialogServiceTest {
 		LocalDateTime createdAt = LocalDateTime.of(2026, 3, 10, 14, 30);
 
 		when(dialogRepository.findPersonalDialogsWithInterlocutor(currentUserId))
-				.thenReturn(List.<Object[]>of(new Object[] {dialogId, createdAt, otherUserId, OTHER_USERNAME}));
+				.thenReturn(List.<Object[]>of(new Object[] {dialogId, createdAt, otherUserId, OTHER_USERNAME, null, null}));
 
 		List<DialogSummaryType> result = dialogService.getDialogs(currentUserId);
 
@@ -146,6 +146,50 @@ class DialogServiceTest {
 		assertEquals(otherUserId.toString(), result.get(0).getInterlocutor().getUserId());
 		assertEquals(OTHER_USERNAME, result.get(0).getInterlocutor().getUsername());
 		assertNotNull(result.get(0).getCreatedAt());
+		assertEquals(null, result.get(0).getLastMessageContent());
+		assertEquals(null, result.get(0).getLastMessageCreatedAt());
+	}
+
+	@Test
+	void getDialogs_includesLastMessage() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogId = UUID.randomUUID();
+		UUID otherUserId = UUID.randomUUID();
+		LocalDateTime createdAt = LocalDateTime.of(2026, 3, 10, 14, 30);
+		LocalDateTime lastMessageAt = LocalDateTime.of(2026, 3, 12, 18, 45);
+
+		when(dialogRepository.findPersonalDialogsWithInterlocutor(currentUserId))
+				.thenReturn(List.<Object[]>of(
+						new Object[] {dialogId, createdAt, otherUserId, OTHER_USERNAME, "hello", lastMessageAt}));
+
+		List<DialogSummaryType> result = dialogService.getDialogs(currentUserId);
+
+		assertEquals("hello", result.get(0).getLastMessageContent());
+		assertNotNull(result.get(0).getLastMessageCreatedAt());
+	}
+
+	@Test
+	void getDialogs_preservesRepositoryOrder() {
+		UUID currentUserId = UUID.randomUUID();
+		UUID dialogWithMessageId = UUID.randomUUID();
+		UUID emptyDialogId = UUID.randomUUID();
+		LocalDateTime olderDialogCreatedAt = LocalDateTime.of(2026, 3, 1, 10, 0);
+		LocalDateTime newerDialogCreatedAt = LocalDateTime.of(2026, 3, 5, 10, 0);
+		LocalDateTime lastMessageAt = LocalDateTime.of(2026, 3, 12, 12, 0);
+
+		when(dialogRepository.findPersonalDialogsWithInterlocutor(currentUserId))
+				.thenReturn(List.<Object[]>of(
+						new Object[] {dialogWithMessageId, newerDialogCreatedAt, UUID.randomUUID(), "alice", "latest",
+								lastMessageAt},
+						new Object[] {emptyDialogId, olderDialogCreatedAt, UUID.randomUUID(), "bob", null, null}));
+
+		List<DialogSummaryType> result = dialogService.getDialogs(currentUserId);
+
+		assertEquals(2, result.size());
+		assertEquals(dialogWithMessageId.toString(), result.get(0).getDialogId());
+		assertEquals("latest", result.get(0).getLastMessageContent());
+		assertEquals(emptyDialogId.toString(), result.get(1).getDialogId());
+		assertEquals(null, result.get(1).getLastMessageContent());
 	}
 
 	@Test

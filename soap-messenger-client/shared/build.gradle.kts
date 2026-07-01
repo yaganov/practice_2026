@@ -35,6 +35,7 @@ kotlin {
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
             implementation(libs.compose.uiToolingPreview)
+            implementation(libs.compose.material.icons.core)
         }
     }
 }

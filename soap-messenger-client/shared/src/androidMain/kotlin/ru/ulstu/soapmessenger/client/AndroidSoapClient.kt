@@ -19,40 +19,49 @@ class AndroidSoapClient(
     private val httpClient: OkHttpClient = OkHttpClient(),
 ) {
     fun registerUser(username: String, password: String): SoapCallResult<String> =
-        execute(
-            requestElement = "RegisterUserRequest",
-            valueElement = "userId",
-            username = username,
-            password = password,
-        )
+        executeSoap(buildAuthEnvelope("RegisterUserRequest", username, password)) { body ->
+            parseSingleValueResponse(body, "userId")
+        }
 
     fun authenticateUser(username: String, password: String): SoapCallResult<String> =
-        execute(
-            requestElement = "AuthenticateUserRequest",
-            valueElement = "token",
-            username = username,
-            password = password,
-        )
+        executeSoap(buildAuthEnvelope("AuthenticateUserRequest", username, password)) { body ->
+            parseSingleValueResponse(body, "token")
+        }
 
-    private fun execute(
-        requestElement: String,
-        valueElement: String,
-        username: String,
-        password: String,
-    ): SoapCallResult<String> {
-        val envelope = buildEnvelope(requestElement, username, password)
-        val request = Request.Builder()
+    fun findUser(token: String, username: String): SoapCallResult<MessengerUser> =
+        executeSoap(buildFindUserEnvelope(username), token) { body ->
+            parseFindUserResponse(body)
+        }
+
+    fun openOrCreateDialog(token: String, otherUserId: String): SoapCallResult<DialogSummary> =
+        executeSoap(buildOpenOrCreateDialogEnvelope(otherUserId), token) { body ->
+            parseOpenOrCreateDialogResponse(body)
+        }
+
+    fun getDialogs(token: String): SoapCallResult<List<DialogSummary>> =
+        executeSoap(buildGetDialogsEnvelope(), token) { body ->
+            parseGetDialogsResponse(body)
+        }
+
+    private fun <T> executeSoap(
+        envelope: String,
+        token: String? = null,
+        parseBody: (String) -> SoapCallResult<T>,
+    ): SoapCallResult<T> {
+        val requestBuilder = Request.Builder()
             .url(SOAP_ENDPOINT)
             .post(envelope.toRequestBody(CONTENT_TYPE))
-            .build()
+        if (token != null) {
+            requestBuilder.addHeader("Authorization", "Bearer $token")
+        }
 
         return try {
-            httpClient.newCall(request).execute().use { response ->
+            httpClient.newCall(requestBuilder.build()).execute().use { response ->
                 val body = response.body?.string()
                 if (body.isNullOrBlank()) {
                     SoapCallResult.NetworkError
                 } else {
-                    parseResponse(body, valueElement)
+                    parseBody(body)
                 }
             }
         } catch (_: IOException) {
@@ -60,7 +69,7 @@ class AndroidSoapClient(
         }
     }
 
-    private fun buildEnvelope(requestElement: String, username: String, password: String): String =
+    private fun buildAuthEnvelope(requestElement: String, username: String, password: String): String =
         """
         |<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="urn:soap-messenger:v1">
         |  <soapenv:Body>
@@ -72,27 +81,197 @@ class AndroidSoapClient(
         |</soapenv:Envelope>
         """.trimMargin()
 
-    private fun parseResponse(
-        body: String,
-        valueElement: String,
-    ): SoapCallResult<String> {
+    private fun buildFindUserEnvelope(username: String): String =
+        """
+        |<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="urn:soap-messenger:v1">
+        |  <soapenv:Body>
+        |    <tns:FindUserRequest>
+        |      <tns:username>${escapeXml(username)}</tns:username>
+        |    </tns:FindUserRequest>
+        |  </soapenv:Body>
+        |</soapenv:Envelope>
+        """.trimMargin()
+
+    private fun buildOpenOrCreateDialogEnvelope(otherUserId: String): String =
+        """
+        |<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="urn:soap-messenger:v1">
+        |  <soapenv:Body>
+        |    <tns:OpenOrCreateDialogRequest>
+        |      <tns:otherUserId>${escapeXml(otherUserId)}</tns:otherUserId>
+        |    </tns:OpenOrCreateDialogRequest>
+        |  </soapenv:Body>
+        |</soapenv:Envelope>
+        """.trimMargin()
+
+    private fun buildGetDialogsEnvelope(): String =
+        """
+        |<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="urn:soap-messenger:v1">
+        |  <soapenv:Body>
+        |    <tns:GetDialogsRequest/>
+        |  </soapenv:Body>
+        |</soapenv:Envelope>
+        """.trimMargin()
+
+    private fun parseSingleValueResponse(body: String, valueElement: String): SoapCallResult<String> {
+        val fault = parseSoapFault(body)
+        if (fault != null) {
+            return SoapCallResult.Fault(fault)
+        }
+
+        val parser = createParser(body)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG &&
+                parser.namespace == TNS_NS &&
+                parser.name == valueElement
+            ) {
+                return SoapCallResult.Ok(readElementText(parser))
+            }
+            event = parser.next()
+        }
+        return SoapCallResult.Fault("Не удалось разобрать ответ сервера")
+    }
+
+    private fun parseFindUserResponse(body: String): SoapCallResult<MessengerUser> {
+        val fault = parseSoapFault(body)
+        if (fault != null) {
+            return SoapCallResult.Fault(fault)
+        }
+
+        val parser = createParser(body)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG &&
+                parser.namespace == TNS_NS &&
+                parser.name == "user"
+            ) {
+                return SoapCallResult.Ok(parseUser(parser))
+            }
+            event = parser.next()
+        }
+        return SoapCallResult.Fault("Не удалось разобрать ответ сервера")
+    }
+
+    private fun parseOpenOrCreateDialogResponse(body: String): SoapCallResult<DialogSummary> {
+        val fault = parseSoapFault(body)
+        if (fault != null) {
+            return SoapCallResult.Fault(fault)
+        }
+
+        val parser = createParser(body)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG &&
+                parser.namespace == TNS_NS &&
+                parser.name == "dialog"
+            ) {
+                return SoapCallResult.Ok(parseDialogSummary(parser))
+            }
+            event = parser.next()
+        }
+        return SoapCallResult.Fault("Не удалось разобрать ответ сервера")
+    }
+
+    private fun parseGetDialogsResponse(body: String): SoapCallResult<List<DialogSummary>> {
+        val fault = parseSoapFault(body)
+        if (fault != null) {
+            return SoapCallResult.Fault(fault)
+        }
+
+        val dialogs = mutableListOf<DialogSummary>()
+        val parser = createParser(body)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG &&
+                parser.namespace == TNS_NS &&
+                parser.name == "dialog"
+            ) {
+                dialogs.add(parseDialogSummary(parser))
+            }
+            event = parser.next()
+        }
+        return SoapCallResult.Ok(dialogs)
+    }
+
+    private fun parseSoapFault(body: String): String? {
         val parser = createParser(body)
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             if (event == XmlPullParser.START_TAG) {
                 when {
                     parser.namespace == SOAP_NS && parser.name == "Fault" ->
-                        return SoapCallResult.Fault(extractFaultMessage(parser))
-                    parser.namespace == TNS_NS && parser.name == valueElement ->
-                        return SoapCallResult.Ok(readElementText(parser))
-                    parser.namespace == TNS_NS &&
-                        (parser.name == "RegisterUserFault" || parser.name == "AuthenticateUserFault") ->
-                        return SoapCallResult.Fault(parseServiceFault(parser))
+                        return extractFaultMessage(parser)
+                    parser.namespace == TNS_NS && parser.name.endsWith("Fault") ->
+                        return parseServiceFault(parser)
                 }
             }
             event = parser.next()
         }
-        return SoapCallResult.Fault("Не удалось разобрать ответ сервера")
+        return null
+    }
+
+    private fun parseUser(parser: XmlPullParser): MessengerUser {
+        var userId = ""
+        var username = ""
+        var depth = 1
+        while (depth > 0) {
+            when (parser.next()) {
+                XmlPullParser.START_TAG -> {
+                    depth++
+                    when {
+                        parser.namespace == TNS_NS && parser.name == "userId" -> {
+                            userId = readElementText(parser)
+                            depth--
+                        }
+                        parser.namespace == TNS_NS && parser.name == "username" -> {
+                            username = readElementText(parser)
+                            depth--
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> depth--
+            }
+        }
+        return MessengerUser(userId = userId, username = username)
+    }
+
+    private fun parseDialogSummary(parser: XmlPullParser): DialogSummary {
+        var dialogId = ""
+        var interlocutor = MessengerUser(userId = "", username = "")
+        var lastMessageContent: String? = null
+        var lastMessageCreatedAt: String? = null
+        var depth = 1
+        while (depth > 0) {
+            when (parser.next()) {
+                XmlPullParser.START_TAG -> {
+                    depth++
+                    when {
+                        parser.namespace == TNS_NS && parser.name == "dialogId" -> {
+                            dialogId = readElementText(parser)
+                            depth--
+                        }
+                        parser.namespace == TNS_NS && parser.name == "interlocutor" -> {
+                            interlocutor = parseUser(parser)
+                        }
+                        parser.namespace == TNS_NS && parser.name == "lastMessageContent" -> {
+                            lastMessageContent = readElementText(parser)
+                            depth--
+                        }
+                        parser.namespace == TNS_NS && parser.name == "lastMessageCreatedAt" -> {
+                            lastMessageCreatedAt = readElementText(parser)
+                            depth--
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> depth--
+            }
+        }
+        return DialogSummary(
+            dialogId = dialogId,
+            interlocutor = interlocutor,
+            lastMessageContent = lastMessageContent,
+            lastMessageCreatedAt = lastMessageCreatedAt,
+        )
     }
 
     private fun extractFaultMessage(parser: XmlPullParser): String {
