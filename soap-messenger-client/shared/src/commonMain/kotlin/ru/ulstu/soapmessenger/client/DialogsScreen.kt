@@ -29,13 +29,13 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices
@@ -56,11 +56,12 @@ data class DialogSummary(
 )
 
 private val FieldShape = RoundedCornerShape(12.dp)
-private val SearchResultShape = RoundedCornerShape(8.dp)
+private val SearchDropdownTopShape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+private val SearchDropdownBottomShape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
 private val ButtonHeight = 52.dp
 private val SearchResultHeight = 44.dp
 private val ListItemHeight = 64.dp
-private const val DialogOpenedMessage = "Диалог открыт"
+private val SearchResultHighlight = Color(0xFFE8F0FC)
 
 @Composable
 fun DialogsScreen(
@@ -72,17 +73,12 @@ fun DialogsScreen(
     onRefresh: () -> Unit,
     onFindUser: (username: String) -> Unit,
     onOpenDialog: (otherUserId: String) -> Unit,
+    onDialogClick: (DialogSummary) -> Unit,
     onSearchQueryChanged: () -> Unit = {},
     initialSearchQuery: String = "",
 ) {
     var searchUsername by remember { mutableStateOf(initialSearchQuery) }
     val controlsEnabled = !isLoading
-
-    LaunchedEffect(statusMessage, statusIsSuccess) {
-        if (statusIsSuccess && statusMessage == DialogOpenedMessage) {
-            searchUsername = ""
-        }
-    }
 
     MaterialTheme {
         Column(
@@ -108,40 +104,29 @@ fun DialogsScreen(
                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = AppPalette.textPrimary,
             )
-            Text(
-                text = "Найдите собеседника или выберите существующий диалог",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppPalette.textSecondary,
+
+            SearchDropdown(
+                value = searchUsername,
+                onValueChange = { newValue ->
+                    if (newValue != searchUsername) {
+                        onSearchQueryChanged()
+                    }
+                    searchUsername = newValue
+                },
+                foundUsername = foundUser?.username,
+                enabled = controlsEnabled,
+                isLoading = isLoading,
+                onSearch = { onFindUser(searchUsername) },
+                onResultClick = { foundUser?.userId?.let(onOpenDialog) },
             )
 
-            Column(modifier = Modifier.fillMaxWidth()) {
-                SearchField(
-                    value = searchUsername,
-                    onValueChange = { newValue ->
-                        if (newValue != searchUsername) {
-                            onSearchQueryChanged()
-                        }
-                        searchUsername = newValue
-                    },
-                    enabled = controlsEnabled,
-                    isLoading = isLoading,
-                    onSearch = { onFindUser(searchUsername) },
-                )
-
-                foundUser?.let { user ->
-                    SearchResultRow(
-                        username = user.username,
-                        enabled = controlsEnabled,
-                        onClick = { onOpenDialog(user.userId) },
+            if (!statusIsSuccess) {
+                statusMessage?.let { message ->
+                    StatusMessageBlock(
+                        message = message,
+                        isSuccess = false,
                     )
                 }
-            }
-
-            statusMessage?.let { message ->
-                StatusMessageBlock(
-                    message = message,
-                    isSuccess = statusIsSuccess,
-                )
             }
 
             HorizontalDivider(color = AppPalette.border)
@@ -177,7 +162,10 @@ fun DialogsScreen(
                         .padding(vertical = 4.dp),
                 ) {
                     dialogs.forEachIndexed { index, dialog ->
-                        DialogListItem(dialog = dialog)
+                        DialogListItem(
+                            dialog = dialog,
+                            onClick = { onDialogClick(dialog) },
+                        )
                         if (index < dialogs.lastIndex) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -192,73 +180,78 @@ fun DialogsScreen(
 }
 
 @Composable
-private fun SearchField(
+private fun SearchDropdown(
     value: String,
     onValueChange: (String) -> Unit,
+    foundUsername: String?,
     enabled: Boolean,
     isLoading: Boolean,
     onSearch: () -> Unit,
+    onResultClick: () -> Unit,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        enabled = enabled,
-        singleLine = true,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(ButtonHeight),
-        shape = FieldShape,
-        placeholder = {
-            Text(
-                text = "Введите username",
-                color = AppPalette.textSecondary,
-            )
-        },
-        trailingIcon = {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = AppPalette.accent,
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                IconButton(onClick = onSearch, enabled = enabled) {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = "Найти",
-                        tint = AppPalette.accent,
-                    )
-                }
-            }
-        },
-        colors = fieldColors(),
-    )
-}
+    val hasResult = foundUsername != null
 
-@Composable
-private fun SearchResultRow(
-    username: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp)
-            .height(SearchResultHeight)
-            .background(AppPalette.surface, SearchResultShape)
-            .border(1.dp, AppPalette.border, SearchResultShape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .border(1.dp, AppPalette.border, FieldShape)
+            .background(AppPalette.surface, FieldShape),
     ) {
-        Text(
-            text = username,
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-            color = AppPalette.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ButtonHeight),
+            shape = if (hasResult) SearchDropdownTopShape else FieldShape,
+            placeholder = {
+                Text(
+                    text = "Введите username",
+                    color = AppPalette.textSecondary,
+                )
+            },
+            trailingIcon = {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = AppPalette.accent,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    IconButton(onClick = onSearch, enabled = enabled) {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = "Найти",
+                            tint = AppPalette.accent,
+                        )
+                    }
+                }
+            },
+            colors = dropdownFieldColors(),
         )
+
+        if (hasResult) {
+            HorizontalDivider(color = AppPalette.border)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(SearchResultHeight)
+                    .background(SearchResultHighlight, SearchDropdownBottomShape)
+                    .clickable(enabled = enabled, onClick = onResultClick)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = foundUsername,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = AppPalette.accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -285,7 +278,10 @@ private fun EmptyDialogsState() {
 }
 
 @Composable
-private fun DialogListItem(dialog: DialogSummary) {
+private fun DialogListItem(
+    dialog: DialogSummary,
+    onClick: () -> Unit,
+) {
     val previewText = dialog.lastMessageContent ?: "Нет сообщений"
     val timeText = dialog.lastMessageCreatedAt?.let(::formatLastMessageTime)
 
@@ -293,6 +289,7 @@ private fun DialogListItem(dialog: DialogSummary) {
         modifier = Modifier
             .fillMaxWidth()
             .height(ListItemHeight)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -359,15 +356,17 @@ private fun formatLastMessageTime(raw: String): String {
 }
 
 @Composable
-private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = AppPalette.accent,
-    unfocusedBorderColor = AppPalette.border,
-    disabledBorderColor = AppPalette.border.copy(alpha = 0.6f),
+private fun dropdownFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Color.Transparent,
+    unfocusedBorderColor = Color.Transparent,
+    disabledBorderColor = Color.Transparent,
     cursorColor = AppPalette.accent,
     focusedTextColor = AppPalette.textPrimary,
     unfocusedTextColor = AppPalette.textPrimary,
-    focusedContainerColor = AppPalette.surface,
-    unfocusedContainerColor = AppPalette.surface,
+    disabledTextColor = AppPalette.textPrimary.copy(alpha = 0.6f),
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+    disabledContainerColor = Color.Transparent,
 )
 
 @Preview(
@@ -403,6 +402,7 @@ private fun DialogsScreenWithDialogsPreview() {
         onRefresh = {},
         onFindUser = {},
         onOpenDialog = {},
+        onDialogClick = {},
     )
 }
 
@@ -422,11 +422,12 @@ private fun DialogsScreenEmptyStatePreview() {
         onRefresh = {},
         onFindUser = {},
         onOpenDialog = {},
+        onDialogClick = {},
     )
 }
 
 @Preview(
-    name = "Результат поиска",
+    name = "Выпадающий результат поиска",
     showSystemUi = true,
     device = Devices.PIXEL_4,
 )
@@ -445,5 +446,6 @@ private fun DialogsScreenSearchResultPreview() {
         onRefresh = {},
         onFindUser = {},
         onOpenDialog = {},
+        onDialogClick = {},
     )
 }

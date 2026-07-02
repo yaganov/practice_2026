@@ -43,6 +43,11 @@ class AndroidSoapClient(
             parseGetDialogsResponse(body)
         }
 
+    fun getMessageHistory(token: String, dialogId: String): SoapCallResult<List<ChatMessage>> =
+        executeSoap(buildGetMessageHistoryEnvelope(dialogId), token) { body ->
+            parseGetMessageHistoryResponse(body)
+        }
+
     private fun <T> executeSoap(
         envelope: String,
         token: String? = null,
@@ -108,6 +113,17 @@ class AndroidSoapClient(
         |<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="urn:soap-messenger:v1">
         |  <soapenv:Body>
         |    <tns:GetDialogsRequest/>
+        |  </soapenv:Body>
+        |</soapenv:Envelope>
+        """.trimMargin()
+
+    private fun buildGetMessageHistoryEnvelope(dialogId: String): String =
+        """
+        |<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="urn:soap-messenger:v1">
+        |  <soapenv:Body>
+        |    <tns:GetMessageHistoryRequest>
+        |      <tns:dialogId>${escapeXml(dialogId)}</tns:dialogId>
+        |    </tns:GetMessageHistoryRequest>
         |  </soapenv:Body>
         |</soapenv:Envelope>
         """.trimMargin()
@@ -191,6 +207,67 @@ class AndroidSoapClient(
             event = parser.next()
         }
         return SoapCallResult.Ok(dialogs)
+    }
+
+    private fun parseGetMessageHistoryResponse(body: String): SoapCallResult<List<ChatMessage>> {
+        val fault = parseSoapFault(body)
+        if (fault != null) {
+            return SoapCallResult.Fault(fault)
+        }
+
+        val messages = mutableListOf<ChatMessage>()
+        val parser = createParser(body)
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG &&
+                parser.namespace == TNS_NS &&
+                parser.name == "message"
+            ) {
+                messages.add(parseMessage(parser))
+            }
+            event = parser.next()
+        }
+        return SoapCallResult.Ok(messages)
+    }
+
+    private fun parseMessage(parser: XmlPullParser): ChatMessage {
+        var messageId = ""
+        var senderId = ""
+        var content = ""
+        var createdAt = ""
+        var depth = 1
+        while (depth > 0) {
+            when (parser.next()) {
+                XmlPullParser.START_TAG -> {
+                    depth++
+                    when {
+                        parser.namespace == TNS_NS && parser.name == "messageId" -> {
+                            messageId = readElementText(parser)
+                            depth--
+                        }
+                        parser.namespace == TNS_NS && parser.name == "senderId" -> {
+                            senderId = readElementText(parser)
+                            depth--
+                        }
+                        parser.namespace == TNS_NS && parser.name == "content" -> {
+                            content = readElementText(parser)
+                            depth--
+                        }
+                        parser.namespace == TNS_NS && parser.name == "createdAt" -> {
+                            createdAt = readElementText(parser)
+                            depth--
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> depth--
+            }
+        }
+        return ChatMessage(
+            messageId = messageId,
+            senderId = senderId,
+            content = content,
+            createdAt = createdAt,
+        )
     }
 
     private fun parseSoapFault(body: String): String? {
